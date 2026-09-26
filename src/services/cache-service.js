@@ -40,7 +40,7 @@ function loadConfig() {
 }
 
 // ─── Upstash Redis connection ─────────────────────────────────────────────────
-const REDIS_URL = 'redis://default:gQAAAAAABF5yAAIgcDEzNmQ5OTcwZWY3Yjk0YmE2ODIxNmE3OGRhZTFiMjMwZA@composed-vulture-286322.upstash.io:6379';
+const REDIS_URL = process.env.REDIS_URL || 'redis://default:gQAAAAAABJ7pAAIgcDIyM2VmMzM0MmZhNTg0OGEwOTYzM2Q0NTBiZTI0MDRjMA@summary-elephant-302825.upstash.io:6379';
 
 let redis      = null;
 let redisReady = false;
@@ -56,7 +56,11 @@ function initRedis() {
   }
 
   const cfg = loadConfig();
-  const url = cfg.redisUrl || REDIS_URL;
+  const url = process.env.REDIS_URL || cfg.redisUrl || REDIS_URL;
+  if (!url) {
+    logger.info('[CacheService] No Redis URL configured — using in-memory cache');
+    return;
+  }
 
   try {
     redis = new Redis(url, {

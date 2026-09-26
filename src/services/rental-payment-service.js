@@ -64,7 +64,7 @@ function isSupabaseConfigured() {
 function getSupabaseClient() {
   if (!isSupabaseConfigured()) return null;
   const secureCreds = getDecryptedSystemCredentials();
-  const apiKey = secureCreds.supabaseServiceRoleKey || config.supabaseServiceRoleKey || config.supabaseAnonKey;
+  const apiKey = config.supabaseServiceRoleKey || config.supabaseAnonKey || secureCreds.supabaseServiceRoleKey || secureCreds.supabaseAnonKey;
 
   return axios.create({
     baseURL: `${config.supabaseUrl.replace(/\/$/, '')}/rest/v1`,

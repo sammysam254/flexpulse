@@ -93,8 +93,8 @@ async function handleDeviceAdd(device) {
         const cfgPath = path.join(process.cwd(), 'config.json');
         if (fs.existsSync(cfgPath)) cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
       } catch (_) {}
-      const supabaseUrl = process.env.SUPABASE_URL || cfg.supabaseUrl || 'https://xbolsgcntkfzzpqnulsa.supabase.co';
-      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || cfg.supabaseServiceRoleKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhib2xzZ2NudGtmenpwcW51bHNhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTc5NTY1MCwiZXhwIjoyMTA1MzcxNjUwfQ.ok_mAqsFkfvP-NyZRiiPmF_eL2blTYI2shnsDAmkefw';
+      const supabaseUrl = process.env.SUPABASE_URL || cfg.supabaseUrl || '';
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || cfg.supabaseServiceRoleKey || cfg.supabaseAnonKey || '';
       if (supabaseUrl && supabaseKey) {
         const res = await axios.get(`${supabaseUrl}/rest/v1/device_rentals?serial_number=eq.${encodeURIComponent(serial)}&select=stealth_root_enabled`, {
           headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },

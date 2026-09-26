@@ -39,15 +39,7 @@ shell.CurrentDirectory = scriptDir
 ' 0 = Hide window, False = Do not wait for script to finish (runs detached in background)
 shell.Run cmdToRun, 0, False
 
-' 3. Ensure cloudflared named tunnel daemon runs silently in background
-Dim cloudflaredPath
-cloudflaredPath = scriptDir & "\assets\bin\cloudflared.exe"
-If Not fso.FileExists(cloudflaredPath) Then cloudflaredPath = "C:\cloudflared\cloudflared.exe"
-If Not fso.FileExists(cloudflaredPath) Then cloudflaredPath = "C:\Program Files\cloudflared\cloudflared.exe"
-If Not fso.FileExists(cloudflaredPath) Then cloudflaredPath = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
-If fso.FileExists(cloudflaredPath) Then
-    shell.Run """" & cloudflaredPath & """ tunnel run --token eyJhIjoiMjEzYzI3Y2IwOTVjZTBlMTE0ZTNkNWYzZDM3ODJiNWQiLCJ0IjoiMDVkMzUyZjgtZGU5Yi00MzBiLWIxYzUtNDUyNzNlZWQzOTExIiwicyI6Ik1qWmlaak13WVdZdE1UTmpPUzAwTm1NeExUZ3hNR0V0TlRWalpURTFNV1ZsTURNMSJ9", 0, False
-End If
+' 3. Cloudflare tunnel is managed dynamically by tunnel-service via config.json
 
 ' 4. Open dashboard in default browser
 WScript.Sleep 2000
