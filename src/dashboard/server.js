@@ -427,7 +427,7 @@ function startDashboardServer(port = 7400) {
       }
     });
 
-    server.listen(port, '0.0.0.0', () => {
+    server.listen(port, () => {
       const url = `http://localhost:${port}`;
       logger.info(`[DashboardServer] Listening at ${url}`);
       resolve({ port, url });

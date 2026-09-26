@@ -18,11 +18,12 @@ const { startDashboardServer, openInChrome, stopDashboardServer, getDashboardUrl
 //  Single Instance Guard
 // ──────────────────────────────────────────────────────────
 
-const gotLock = app.requestSingleInstanceLock();
+let gotLock = true;
+try {
+  gotLock = app.requestSingleInstanceLock();
+} catch (_) {}
 if (!gotLock) {
-  logger.info('[SingleInstance] DeviceFarm Agent is ALREADY running. Preserving active streams.');
-  app.quit();
-  process.exit(0);
+  logger.warn('[SingleInstance] Single instance lock held or stale; continuing launch.');
 }
 
 // ──────────────────────────────────────────────────────────

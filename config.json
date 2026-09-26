@@ -9,9 +9,9 @@
   "supabaseUrl": "https://hhcxnsaezvmhqrhukvnm.supabase.co",
   "supabaseServiceRoleKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhoY3huc2FlenZtaHFyaHVrdm5tIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDQzODQ5MywiZXhwIjoyMTA2MDE0NDkzfQ.j80pT_q3mKIxnz9DxqDDZueVafRKrD1DTU9IJv-eFAQ",
   "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhoY3huc2FlenZtaHFyaHVrdm5tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0Mzg0OTMsImV4cCI6MjEwNjAxNDQ5M30.4T4TTnOt5IwCP2fCoH0n9Cd5rGl2NmBHEdM0jOH8FVw",
-  "domain": "stream.dennoh.site",
+  "domain": "agent.dennoh.site",
   "allowLocalStandalone": true,
-  "cloudflareToken": "eyJhIjoiMjEzYzI3Y2IwOTVjZTBlMTE0ZTNkNWYzZDM3ODJiNWQiLCJ0IjoiMjA0ZTVjM2YtNWVlNS00N2ZjLTk1YWItNzA4MTBlYjc2OGQzIiwicyI6IlpHRm1PR1ZoTURRdE5HRTFNUzAwTVdJMkxUbGlORGN0TkdVNE1UaG1NMkUxTnpJeiJ9",
+  "cloudflareToken": "eyJhIjoiMjEzYzI3Y2IwOTVjZTBlMTE0ZTNkNWYzZDM3ODJiNWQiLCJ0IjoiMDVkMzUyZjgtZGU5Yi00MzBiLWIxYzUtNDUyNzNlZWQzOTExIiwicyI6Ik1qWmlaak13WVdZdE1UTmpPUzAwTm1NeExUZ3hNR0V0TlRWalpURTFNV1ZsTURNMSJ9",
   "machineBindingCode": "20741881",
   "redisUrl": "redis://default:gQAAAAAABJ7pAAIgcDIyM2VmMzM0MmZhNTg0OGEwOTYzM2Q0NTBiZTI0MDRjMA@summary-elephant-302825.upstash.io:6379"
 }

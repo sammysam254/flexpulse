@@ -125,7 +125,7 @@ export default function AdminRentalHub() {
 
     const newKey = generate16CharKey();
     const newPin = generate6DigitPin();
-    const streamDomain = import.meta.env.VITE_STREAM_DOMAIN || 'https://stream.dennoh.site';
+    const streamDomain = import.meta.env.VITE_STREAM_DOMAIN || 'https://agent.dennoh.site';
     const baseUrl = streamDomain.endsWith('/') ? streamDomain : `${streamDomain}/`;
     const newStreamUrl = `${baseUrl}?udid=${encodeURIComponent(device.serial)}&key=${newKey}&pin=${newPin}`;
 

@@ -1850,7 +1850,7 @@ async function startStreamServer(serial, port) {
         socket.destroy();
       } catch (_) {}
     });
-    server.listen(port, '0.0.0.0', () => {
+    server.listen(port, () => {
       const localUrl = `http://localhost:${port}`;
       logger.info(`[StreamServer] Listening at ${localUrl}`);
       activeServers.set(serial, { server, wss, engine, serial });
@@ -1872,9 +1872,9 @@ async function startStreamServer(serial, port) {
 // ─── Exports ─────────────────────────────────────────────────────────────────
 
 function buildStreamUrl(tunnelDomain, port, serial) {
-  let cleanDomain = (tunnelDomain || 'stream.dennoh.site').replace(/\/+$/, '');
-  if (cleanDomain.includes('agent.dennoh.site') || cleanDomain === 'dennoh.site' || cleanDomain.startsWith('https://dennoh.site') || cleanDomain.startsWith('http://dennoh.site')) {
-    cleanDomain = 'stream.dennoh.site';
+  let cleanDomain = (tunnelDomain || 'agent.dennoh.site').replace(/\/+$/, '');
+  if (cleanDomain.includes('stream.dennoh.site') || cleanDomain === 'dennoh.site' || cleanDomain.startsWith('https://dennoh.site') || cleanDomain.startsWith('http://dennoh.site')) {
+    cleanDomain = 'agent.dennoh.site';
   }
   const domain = cleanDomain.startsWith('http') ? cleanDomain : `https://${cleanDomain}`;
   return `${domain}/?udid=${encodeURIComponent(serial)}`;

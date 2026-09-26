@@ -22,11 +22,11 @@ export function generate6DigitPin() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-export const DEFAULT_STREAM_DOMAIN = import.meta.env.VITE_STREAM_DOMAIN || 'https://stream.dennoh.site';
+export const DEFAULT_STREAM_DOMAIN = import.meta.env.VITE_STREAM_DOMAIN || 'https://agent.dennoh.site';
 
-// Normalizes any device stream URL to ensure it always routes to stream.dennoh.site
+// Normalizes any device stream URL to ensure it always routes to agent.dennoh.site
 export function normalizeStreamUrl(url, serial) {
-  const baseDomain = (DEFAULT_STREAM_DOMAIN || 'https://stream.dennoh.site').replace(/\/+$/, '');
+  const baseDomain = (DEFAULT_STREAM_DOMAIN || 'https://agent.dennoh.site').replace(/\/+$/, '');
   if (!url) {
     return serial ? `${baseDomain}/?udid=${encodeURIComponent(serial)}` : baseDomain;
   }
@@ -35,8 +35,8 @@ export function normalizeStreamUrl(url, serial) {
     const u = new URL(raw);
     const target = new URL(baseDomain.startsWith('http') ? baseDomain : `https://${baseDomain}`);
     
-    // Rewrite host if it points to dennoh.site, agent.dennoh.site, localhost, or old diamt host
-    if (u.hostname === 'agent.dennoh.site' || u.hostname === 'dennoh.site' || u.hostname.includes('diamt') || u.hostname.includes('localhost') || u.hostname.includes('127.0.0.1')) {
+    // Rewrite host if it points to stream.dennoh.site, dennoh.site, localhost, or old diamt host
+    if (u.hostname === 'stream.dennoh.site' || u.hostname === 'dennoh.site' || u.hostname.includes('diamt') || u.hostname.includes('localhost') || u.hostname.includes('127.0.0.1')) {
       u.protocol = target.protocol;
       u.host = target.host;
     }
@@ -49,8 +49,8 @@ export function normalizeStreamUrl(url, serial) {
   }
 }
 
-// Constructs stream URL with 16-character key and 6-digit PIN strictly on stream.dennoh.site
+// Constructs stream URL with 16-character key and 6-digit PIN strictly on agent.dennoh.site
 export function rotateUrlWithKeyAndPin(currentUrl, serial, newKey, newPin) {
-  const baseDomain = (DEFAULT_STREAM_DOMAIN || 'https://stream.dennoh.site').replace(/\/+$/, '');
+  const baseDomain = (DEFAULT_STREAM_DOMAIN || 'https://agent.dennoh.site').replace(/\/+$/, '');
   return `${baseDomain}/?udid=${encodeURIComponent(serial)}&key=${encodeURIComponent(newKey)}&pin=${encodeURIComponent(newPin)}`;
 }
