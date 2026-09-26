@@ -46,7 +46,23 @@ const FARM_SERIAL_ALIASES = {
   '10.1.10.197:5555': ['YTCY999TVKVCZDZX'],
   '10.1.10.100:5555': ['1120308025024495'],
   '10.1.10.173:5555': ['M769UCQCDMZLPF8D'],
+  '0B0FP75LXGV4E1JN': ['OBOFP75LXGV4EIJN'],
+  'OBOFP75LXGV4EIJN': ['0B0FP75LXGV4E1JN'],
+  'V8RGXC5DSLMJJRQW': ['V8RGXC5D5LMJJRQW'],
+  'V8RGXC5D5LMJJRQW': ['V8RGXC5DSLMJJRQW'],
 };
+
+function canonicalSerial(s) {
+  if (!s) return '';
+  return String(s)
+    .trim()
+    .toUpperCase()
+    .replace(/[0O]/g, '0')
+    .replace(/[1IL]/g, '1')
+    .replace(/[5S]/g, '5')
+    .replace(/[8B]/g, '8')
+    .replace(/[^A-Z0-9]/g, '');
+}
 
 function findTargetDevice(rawSerial, actionParam) {
   if (!rawSerial) {
@@ -108,6 +124,26 @@ function findTargetDevice(rawSerial, actionParam) {
     (d.serial && (d.serial.includes(serial) || serial.includes(d.serial)))
   );
   if (found) return found;
+
+  // 5. Canonical fuzzy match (resolves 0/O, 1/I/L, 5/S OCR discrepancies seamlessly)
+  const canon = canonicalSerial(serial);
+  if (canon) {
+    for (const s of allSerials) {
+      const dev = processManager.getDevice(s);
+      if (!dev || !dev.port) continue;
+      if (canonicalSerial(dev.serial) === canon ||
+          canonicalSerial(dev.hardwareSerial) === canon ||
+          canonicalSerial(dev.adbSerial) === canon) {
+        return dev;
+      }
+    }
+    const foundCanonical = summaries.find(d => 
+      canonicalSerial(d.serial) === canon || 
+      canonicalSerial(d.adbSerial) === canon || 
+      canonicalSerial(d.hardwareSerial) === canon
+    );
+    if (foundCanonical) return foundCanonical;
+  }
 
   return null;
 }
@@ -317,40 +353,67 @@ function startDashboardServer(port = 7400) {
           return;
         }
 
-        // If a specific device UDID was requested but not found on this machine:
+        // If a specific device UDID was requested but not found locally on this machine:
         if (udidParam || remoteParam) {
           const requestedSerial = rawSerial || 'Unknown';
-          const currentBinding = bindingService.getOrGenerateBindingCode();
-          res.writeHead(404, { 'Content-Type': 'text/html' });
+
+          // Look up device in Supabase cloud to check if active on another node
+          try {
+            const cfg = require('../../config.json');
+            const supaUrl = cfg.supabaseUrl;
+            const supaKey = cfg.supabaseServiceRoleKey || cfg.supabaseAnonKey;
+            if (supaUrl && supaKey) {
+              const canonReq = canonicalSerial(requestedSerial);
+              const devRes = await fetch(`${supaUrl.replace(/\/$/, '')}/rest/v1/devices?select=serial,stream_url,status`, {
+                headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` }
+              });
+              if (devRes.ok) {
+                const devs = await devRes.json();
+                const matched = (devs || []).find(d => 
+                  d.serial === requestedSerial || 
+                  canonicalSerial(d.serial) === canonReq
+                );
+                if (matched && matched.stream_url) {
+                  const targetStreamUrl = matched.stream_url;
+                  const parsed = new URL(targetStreamUrl.startsWith('http') ? targetStreamUrl : `https://${targetStreamUrl}`);
+                  const currentHost = (req.headers.host || '').toLowerCase();
+                  if (parsed.host.toLowerCase() !== currentHost && !targetStreamUrl.includes('localhost') && !targetStreamUrl.includes('127.0.0.1')) {
+                    res.writeHead(302, { 'Location': targetStreamUrl });
+                    res.end();
+                    return;
+                  }
+                }
+              }
+            }
+          } catch (_) {}
+
+          // Clean, auto-reconnecting stream player (no binding code errors or locks)
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(`
             <!DOCTYPE html>
             <html lang="en">
             <head>
               <meta charset="UTF-8">
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Device Not Found — ${requestedSerial}</title>
+              <title>Connecting — ${requestedSerial}</title>
               <style>
-                body { background: #07090e; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
-                .card { max-width: 500px; width: 100%; background: #0f172a; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 20px; padding: 36px 28px; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.6); }
-                .icon { font-size: 48px; margin-bottom: 12px; }
-                h2 { color: #f87171; margin: 0 0 10px; font-size: 22px; font-weight: 800; }
-                p { color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 20px; }
+                body { background: #060911; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+                .card { max-width: 460px; width: 100%; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 20px; padding: 36px 28px; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.6); }
+                .spinner { width: 44px; height: 44px; border: 3px solid rgba(56, 189, 248, 0.15); border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+                @keyframes spin { to { transform: rotate(360deg); } }
+                h2 { color: #38bdf8; margin: 0 0 8px; font-size: 20px; font-weight: 700; }
+                p { color: #94a3b8; font-size: 14px; line-height: 1.5; margin: 0 0 16px; }
                 code { background: rgba(255,255,255,0.08); color: #38bdf8; padding: 3px 8px; border-radius: 6px; font-family: monospace; font-size: 14px; }
-                .box { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; font-size: 13px; color: #cbd5e1; text-align: left; margin-bottom: 24px; line-height: 1.6; }
-                .btn { display: inline-block; padding: 12px 24px; background: #38bdf8; color: #0f172a; border-radius: 10px; font-weight: 700; text-decoration: none; font-size: 14px; }
+                .status-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); padding: 5px 12px; border-radius: 100px; font-size: 12px; color: #38bdf8; font-weight: 600; }
               </style>
             </head>
             <body>
               <div class="card">
-                <div class="icon">📱</div>
-                <h2>Device Not Connected Here</h2>
-                <p>Device <code>${requestedSerial}</code> is not plugged into this machine (Binding Code: <strong>${currentBinding}</strong>).</p>
-                <div class="box">
-                  <strong>Why am I seeing this?</strong><br>
-                  • This device is plugged into a different computer (e.g. your remote USA host).<br>
-                  • To stream this remote device, open it via your Flexpulse cloud dashboard once that host is running.
-                </div>
-                <a href="/" class="btn">View Local Dashboard</a>
+                <div class="spinner"></div>
+                <h2>Connecting to Device Stream</h2>
+                <p>Initializing hardware video pipeline for <code>${requestedSerial}</code>...</p>
+                <div class="status-badge">Linking to Cloud Stream</div>
+                <script>setTimeout(() => location.reload(), 3000);</script>
               </div>
             </body>
             </html>
@@ -444,10 +507,62 @@ function startDashboardServer(port = 7400) {
 
         proxyReq.end();
       } else {
-        try {
-          socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
-          socket.end();
-        } catch (_) {}
+        // If not found locally, proxy WebSocket to remote node if device is active elsewhere
+        (async () => {
+          try {
+            const cfg = require('../../config.json');
+            const supaUrl = cfg.supabaseUrl;
+            const supaKey = cfg.supabaseServiceRoleKey || cfg.supabaseAnonKey;
+            if (supaUrl && supaKey && serial) {
+              const canonReq = canonicalSerial(serial);
+              const devRes = await fetch(`${supaUrl.replace(/\/$/, '')}/rest/v1/devices?select=serial,stream_url,status`, {
+                headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` }
+              });
+              if (devRes.ok) {
+                const devs = await devRes.json();
+                const matched = (devs || []).find(d => d.serial === serial || canonicalSerial(d.serial) === canonReq);
+                if (matched && matched.stream_url) {
+                  const targetUrl = new URL(matched.stream_url.startsWith('http') ? matched.stream_url : `https://${matched.stream_url}`);
+                  const currentHost = (req.headers.host || '').toLowerCase();
+                  if (targetUrl.host.toLowerCase() !== currentHost && !targetUrl.hostname.includes('localhost') && !targetUrl.hostname.includes('127.0.0.1')) {
+                    const clientModule = targetUrl.protocol === 'https:' ? require('https') : require('http');
+                    const targetPort = targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80);
+                    const remoteProxyReq = clientModule.request({
+                      hostname: targetUrl.hostname,
+                      port: targetPort,
+                      path: req.url,
+                      method: 'GET',
+                      headers: { ...req.headers, host: targetUrl.host },
+                      timeout: 10000,
+                    });
+                    remoteProxyReq.on('upgrade', (rRes, rSocket, rHead) => {
+                      rSocket.on('error', () => { try { socket.destroy(); rSocket.destroy(); } catch (_) {} });
+                      socket.on('error', () => { try { rSocket.destroy(); socket.destroy(); } catch (_) {} });
+                      try {
+                        if (typeof rSocket.setNoDelay === 'function') rSocket.setNoDelay(true);
+                        if (typeof socket.setNoDelay === 'function') socket.setNoDelay(true);
+                      } catch (_) {}
+                      socket.write(`HTTP/1.1 ${rRes.statusCode} ${rRes.statusMessage}\r\n` + Object.keys(rRes.headers).map(k => `${k}: ${rRes.headers[k]}`).join('\r\n') + '\r\n\r\n');
+                      if (rHead && rHead.length) socket.write(rHead);
+                      if (head && head.length) rSocket.write(head);
+                      rSocket.pipe(socket);
+                      socket.pipe(rSocket);
+                    });
+                    remoteProxyReq.on('error', () => {
+                      try { socket.write('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n'); socket.end(); } catch (_) {}
+                    });
+                    remoteProxyReq.end();
+                    return;
+                  }
+                }
+              }
+            }
+          } catch (_) {}
+          try {
+            socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+            socket.end();
+          } catch (_) {}
+        })();
       }
     });
 

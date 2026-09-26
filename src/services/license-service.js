@@ -213,10 +213,7 @@ async function syncDeviceToCloud(params) {
           const parsedDb = new URL(dbStreamUrl);
           const parsedNew = new URL(streamUrl);
           parsedDb.protocol = parsedNew.protocol;
-          parsedDb.host = parsedNew.host || 'agent.dennoh.site';
-          if (parsedDb.hostname === 'stream.dennoh.site' || parsedDb.hostname === 'dennoh.site') {
-            parsedDb.host = 'agent.dennoh.site';
-          }
+          parsedDb.host = parsedNew.host;
           finalStreamUrl = parsedDb.toString();
         } catch (_) {
           finalStreamUrl = streamUrl;
@@ -226,12 +223,6 @@ async function syncDeviceToCloud(params) {
         const matchPin = dbStreamUrl.match(/pin=([^&]+)/);
         if (matchPin && matchPin[1]) ROTATED_STREAM_PINS.set(serial, matchPin[1]);
       }
-    }
-
-    if (finalStreamUrl) {
-      finalStreamUrl = finalStreamUrl
-        .replace('://stream.dennoh.site', '://agent.dennoh.site')
-        .replace('://dennoh.site', '://agent.dennoh.site');
     }
 
     // 1. Sync to public.devices table (used by website dashboards)

@@ -1905,9 +1905,6 @@ async function startStreamServer(serial, port) {
 
 function buildStreamUrl(tunnelDomain, port, serial) {
   let cleanDomain = (tunnelDomain || 'agent.dennoh.site').replace(/\/+$/, '');
-  if (cleanDomain.includes('stream.dennoh.site') || cleanDomain === 'dennoh.site' || cleanDomain.startsWith('https://dennoh.site') || cleanDomain.startsWith('http://dennoh.site')) {
-    cleanDomain = 'agent.dennoh.site';
-  }
   const domain = cleanDomain.startsWith('http') ? cleanDomain : `https://${cleanDomain}`;
   return `${domain}/?udid=${encodeURIComponent(serial)}`;
 }

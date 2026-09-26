@@ -35,8 +35,8 @@ export function normalizeStreamUrl(url, serial) {
     const u = new URL(raw);
     const target = new URL(baseDomain.startsWith('http') ? baseDomain : `https://${baseDomain}`);
     
-    // Rewrite host if it points to stream.dennoh.site, dennoh.site, localhost, or old diamt host
-    if (u.hostname === 'stream.dennoh.site' || u.hostname === 'dennoh.site' || u.hostname.includes('diamt') || u.hostname.includes('localhost') || u.hostname.includes('127.0.0.1')) {
+    // Only rewrite if hostname is an unreachable local loopback (localhost / 127.0.0.1) or defunct domain
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname.includes('diamt')) {
       u.protocol = target.protocol;
       u.host = target.host;
     }
@@ -49,8 +49,15 @@ export function normalizeStreamUrl(url, serial) {
   }
 }
 
-// Constructs stream URL with 16-character key and 6-digit PIN strictly on agent.dennoh.site
 export function rotateUrlWithKeyAndPin(currentUrl, serial, newKey, newPin) {
-  const baseDomain = (DEFAULT_STREAM_DOMAIN || 'https://agent.dennoh.site').replace(/\/+$/, '');
-  return `${baseDomain}/?udid=${encodeURIComponent(serial)}&key=${encodeURIComponent(newKey)}&pin=${encodeURIComponent(newPin)}`;
+  let domain = (DEFAULT_STREAM_DOMAIN || 'https://agent.dennoh.site').replace(/\/+$/, '');
+  if (currentUrl) {
+    try {
+      const u = new URL(currentUrl.startsWith('http') ? currentUrl : `https://${currentUrl}`);
+      if (u.origin && !u.origin.includes('localhost') && !u.origin.includes('127.0.0.1')) {
+        domain = u.origin;
+      }
+    } catch (_) {}
+  }
+  return `${domain}/?udid=${encodeURIComponent(serial)}&key=${encodeURIComponent(newKey)}&pin=${encodeURIComponent(newPin)}`;
 }

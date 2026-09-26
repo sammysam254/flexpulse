@@ -152,22 +152,15 @@ async function handleDeviceAdd(device) {
       return;
     }
 
-    // 2. Sync machine binding (no payment check — license managed online)
-    const bindingCode = await bindingService.syncMachineBinding();
-    const licenseStatus = await licenseService.checkLicenseStatus(bindingCode);
-
-    if (!licenseStatus.isActive) {
-      logger.warn(`[LICENSE] Binding ${bindingCode} is NOT licensed: ${licenseStatus.note}`);
-      logger.warn(`[LICENSE] Device ${serial} stream will be locked until license is restored by seed admin.`);
-    } else {
-      logger.info(`[LICENSE] Binding ${bindingCode} is active (${licenseStatus.mode})`);
-    }
+    // 2. Machine binding sync (informative only — all devices stream immediately)
+    const bindingCode = await bindingService.syncMachineBinding().catch(() => '10000000');
+    logger.info(`[DeviceAgent] Device ${serial} linked to cloud dashboard under binding ${bindingCode}`);
 
     // 3. Allocate port
     const port = await getFreePort(PORT_RANGE_START, PORT_RANGE_END);
     logger.info(`Allocated port ${port} for device ${serial}`);
 
-    // 4. Start stream server (always starts — license is enforced at website level)
+    // 4. Start stream server (always starts instantly — no license lockout)
     const { streamProcess, localUrl } = await startStreamServer(serial, port);
     logger.info(`Stream server started for ${serial}: ${localUrl}`);
 
@@ -177,13 +170,10 @@ async function handleDeviceAdd(device) {
 
     try {
       const activeCfg = loadConfig();
-      const rawCustomDomain = activeCfg.domain || activeCfg.customDomain || 'agent.dennoh.site';
+      const rawCustomDomain = activeCfg.domain || activeCfg.customDomain || '';
       let cleanCustomDomain = (rawCustomDomain && !rawCustomDomain.includes('localhost') && !rawCustomDomain.includes('127.0.0.1'))
         ? rawCustomDomain.replace(/^https?:\/\//, '').replace(/\/+$/, '')
-        : 'agent.dennoh.site';
-      if (cleanCustomDomain === 'dennoh.site' || cleanCustomDomain === 'stream.dennoh.site') {
-        cleanCustomDomain = 'agent.dennoh.site';
-      }
+        : '';
 
       const tunnel = await createTunnel(port);
       if (tunnel && tunnel.publicUrl) {
@@ -379,22 +369,6 @@ function startCloudHeartbeat() {
           status: 'online',
         });
       }
-
-      // Reconcile with Supabase: mark any devices for this binding code that are NOT active as offline
-      try {
-        const client = licenseService.getSupabaseClient ? licenseService.getSupabaseClient() : null;
-        if (client) {
-          const res = await client.get(`/devices?binding_code=eq.${encodeURIComponent(defaultBinding)}&status=eq.online&select=serial`);
-          if (res.data && Array.isArray(res.data)) {
-            for (const row of res.data) {
-              if (row.serial && !activeSerials.has(row.serial)) {
-                logger.info(`[Heartbeat] Device ${row.serial} no longer attached on USB — marking offline in cloud`);
-                await licenseService.markDeviceOffline(row.serial);
-              }
-            }
-          }
-        }
-      } catch (_) {}
     } catch (_) {}
   };
 
