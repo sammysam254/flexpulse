@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * ─── DIAMT Redis Cache Service ───────────────────────────────────────────────
+ * ─── Flexpulse Redis Cache Service ───────────────────────────────────────────────
  * Upstash Redis via TLS (ioredis) with automatic in-memory fallback.
  * Wraps all hot-path Supabase reads behind a unified cache layer.
  *

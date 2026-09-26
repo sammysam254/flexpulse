@@ -66,7 +66,7 @@ export default function BlockedScreen() {
           color: 'var(--text-muted)', fontSize: '14px',
           lineHeight: '1.7', marginBottom: '24px',
         }}>
-          Your account has been suspended by an administrator. You no longer have access to the DIAMT system.
+          Your account has been suspended by an administrator. You no longer have access to the Flexpulse system.
         </p>
 
         {/* Blocked Reason */}

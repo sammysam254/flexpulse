@@ -115,7 +115,7 @@ function getOrGenerateBindingCode() {
   }
   try {
     const netInfo = getHardwareNetworkInfo();
-    const hash = crypto.createHash('sha256').update((netInfo.mac || '') + (os.hostname() || 'DIAMT')).digest('hex');
+    const hash = crypto.createHash('sha256').update((netInfo.mac || '') + (os.hostname() || 'Flexpulse')).digest('hex');
     const numericCode = String((parseInt(hash.slice(0, 8), 16) % 90000000) + 10000000);
     cfg.machineBindingCode = numericCode;
     saveConfig(cfg);
@@ -155,7 +155,7 @@ async function syncMachineBinding() {
 
     const payload = {
       binding_code: bindingCode,
-      machine_name: 'DIAMT-' + (process.env.COMPUTERNAME || netInfo.hostname || 'Node'),
+      machine_name: 'Flexpulse-' + (process.env.COMPUTERNAME || netInfo.hostname || 'Node'),
       mac_address: netInfo.mac,
       local_ip: netInfo.localIp,
       broadcast_ip: netInfo.broadcastIp,

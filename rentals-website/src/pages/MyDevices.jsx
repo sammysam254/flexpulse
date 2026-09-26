@@ -109,7 +109,7 @@ export default function MyDevices() {
   return (
     <RentalsLayout>
       <SEO
-        title="My Rented Devices — DIAMT Device Rentals"
+        title="My Rented Devices — Flexpulse Device Rentals"
         description="View and control your active rented real Android cloud devices with instant PIN unlock."
         noIndex={true}
       />

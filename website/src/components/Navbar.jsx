@@ -38,8 +38,8 @@ export default function Navbar({ toggleSidebar }) {
           <Menu size={20} />
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '18px' }}>
-          <img src="/favicon.svg" alt="DIAMT" style={{ width: '28px', height: '28px' }} />
-          <span>DIAMT</span>
+          <img src="/favicon.svg" alt="Flexpulse" style={{ width: '28px', height: '28px', borderRadius: '6px' }} />
+          <span>Flexpulse</span>
         </div>
       </div>
 

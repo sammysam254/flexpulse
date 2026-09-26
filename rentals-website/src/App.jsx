@@ -35,7 +35,7 @@ const ProtectedRoute = ({ children }) => {
           <span style={{ fontWeight: 900, color: '#fff', fontSize: '20px' }}>D</span>
         </div>
         <div style={{ fontWeight: 800, fontSize: '16px', letterSpacing: '0.4px' }}>
-          DIAMT <span style={{ color: 'var(--primary, #38bdf8)' }}>MARKETPLACE</span>
+          Flexpulse <span style={{ color: 'var(--primary, #38bdf8)' }}>MARKETPLACE</span>
         </div>
       </div>
     );

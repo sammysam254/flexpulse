@@ -58,7 +58,7 @@ export default function ResetPassword() {
       background: 'radial-gradient(circle at top, rgba(56,189,248,0.1), transparent)'
     }}>
       <SEO
-        title="Set New Password — DIAMT Platform"
+        title="Set New Password — Flexpulse Platform"
         description="Enter your new password to complete account recovery."
       />
       <div className="card" style={{ maxWidth: '440px', width: '100%', padding: '36px 28px' }}>

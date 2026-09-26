@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DIAMT Agent — Local Machine Control Center</title>
+  <title>Flexpulse Agent — Local Machine Control Center</title>
   <meta name="description" content="Local control center and hardware agent dashboard for managing USB-connected Android devices and WebRTC streaming.">
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#0b132b">
@@ -176,8 +176,8 @@
     .modal-body iframe {
       width: 100%; height: 100%; border: none; display: block;
     }
-    /* DIAMT Signature Quantum Orbital Loader */
-    .diamt-loader-container {
+    /* Flexpulse Signature Quantum Orbital Loader */
+    .flexpulse-loader-container {
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -186,7 +186,7 @@
       text-align: center;
       grid-column: 1 / -1;
     }
-    .diamt-loader-core {
+    .flexpulse-loader-core {
       position: relative;
       width: 72px;
       height: 72px;
@@ -195,25 +195,25 @@
       justify-content: center;
       margin-bottom: 20px;
     }
-    .diamt-orbit-ring {
+    .flexpulse-orbit-ring {
       position: absolute;
       border-radius: 50%;
       pointer-events: none;
     }
-    .diamt-orbit-ring.outer {
+    .flexpulse-orbit-ring.outer {
       inset: 0;
       border: 2px solid transparent;
       border-top-color: #38bdf8;
       border-right-color: #2563eb;
-      animation: diamtOrbitSpin 1.6s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
+      animation: flexpulseOrbitSpin 1.6s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
     }
-    .diamt-orbit-ring.inner {
+    .flexpulse-orbit-ring.inner {
       inset: 8px;
       border: 1.5px dashed rgba(56, 189, 248, 0.4);
       border-bottom-color: #818cf8;
-      animation: diamtOrbitReverse 2.4s linear infinite;
+      animation: flexpulseOrbitReverse 2.4s linear infinite;
     }
-    .diamt-core-emblem {
+    .flexpulse-core-emblem {
       position: relative;
       z-index: 2;
       width: 36px;
@@ -224,21 +224,21 @@
       align-items: center;
       justify-content: center;
       box-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
-      animation: diamtCorePulse 2.8s ease-in-out infinite;
+      animation: flexpulseCorePulse 2.8s ease-in-out infinite;
     }
-    .diamt-core-svg {
+    .flexpulse-core-svg {
       width: 20px;
       height: 20px;
       color: #ffffff;
     }
-    .diamt-loader-brand {
+    .flexpulse-loader-brand {
       font-size: 13px;
       font-weight: 800;
       letter-spacing: 2px;
       color: #ffffff;
       margin-bottom: 6px;
     }
-    .diamt-loader-title {
+    .flexpulse-loader-title {
       font-size: 13px;
       font-weight: 700;
       color: #93c5fd;
@@ -248,32 +248,32 @@
       gap: 8px;
       letter-spacing: 1px;
     }
-    .diamt-pulse-dot {
+    .flexpulse-pulse-dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
       background: #38bdf8;
       box-shadow: 0 0 10px #38bdf8;
-      animation: diamtPulseDot 1.4s ease-in-out infinite;
+      animation: flexpulsePulseDot 1.4s ease-in-out infinite;
     }
-    .diamt-loader-subtext {
+    .flexpulse-loader-subtext {
       font-size: 12px;
       color: #64748b;
       margin-top: 4px;
     }
-    @keyframes diamtOrbitSpin {
+    @keyframes flexpulseOrbitSpin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
-    @keyframes diamtOrbitReverse {
+    @keyframes flexpulseOrbitReverse {
       0% { transform: rotate(360deg); }
       100% { transform: rotate(0deg); }
     }
-    @keyframes diamtCorePulse {
+    @keyframes flexpulseCorePulse {
       0%, 100% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.4)); }
       50% { transform: scale(1.06); filter: drop-shadow(0 0 20px rgba(56, 189, 248, 0.8)); }
     }
-    @keyframes diamtPulseDot {
+    @keyframes flexpulsePulseDot {
       0%, 100% { opacity: 0.3; transform: scale(0.8); }
       50% { opacity: 1; transform: scale(1.2); }
     }
@@ -292,7 +292,7 @@
           </svg>
         </div>
         <div>
-          <h1 class="brand-text">DIAMT Agent</h1>
+          <h1 class="brand-text">Flexpulse Agent</h1>
           <div style="font-size: 12px; color: var(--text-dim);">Local Machine Control Center</div>
         </div>
       </div>
@@ -332,7 +332,7 @@
           ONLINE & CONNECTED
         </div>
         <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
-          All connected Android devices synchronize directly to your DIAMT Cloud Dashboard in real time without requiring manual machine binding codes.
+          All connected Android devices synchronize directly to your Flexpulse Cloud Dashboard in real time without requiring manual machine binding codes.
         </div>
       </div>
       <button class="btn-action btn-primary" style="padding: 12px 20px; font-size: 14px;" onclick="fetchDevices()">
@@ -348,21 +348,21 @@
       </div>
 
       <div id="devicesContainer" class="devices-grid">
-        <div class="diamt-loader-container">
-          <div class="diamt-loader-core">
-            <div class="diamt-orbit-ring outer"></div>
-            <div class="diamt-orbit-ring inner"></div>
-            <div class="diamt-core-emblem">
-              <svg viewBox="0 0 24 24" fill="none" class="diamt-core-svg">
+        <div class="flexpulse-loader-container">
+          <div class="flexpulse-loader-core">
+            <div class="flexpulse-orbit-ring outer"></div>
+            <div class="flexpulse-orbit-ring inner"></div>
+            <div class="flexpulse-core-emblem">
+              <svg viewBox="0 0 24 24" fill="none" class="flexpulse-core-svg">
                 <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </div>
           </div>
-          <div class="diamt-loader-brand">DIAMT <span style="color: #38bdf8;">AGENT</span></div>
-          <div class="diamt-loader-title"><span class="diamt-pulse-dot"></span>INTERROGATING USB BUS</div>
-          <div class="diamt-loader-subtext">Scanning connected hardware and WebRTC streaming nodes...</div>
+          <div class="flexpulse-loader-brand">Flexpulse <span style="color: #38bdf8;">AGENT</span></div>
+          <div class="flexpulse-loader-title"><span class="flexpulse-pulse-dot"></span>INTERROGATING USB BUS</div>
+          <div class="flexpulse-loader-subtext">Scanning connected hardware and WebRTC streaming nodes...</div>
         </div>
       </div>
     </section>
@@ -401,21 +401,21 @@
 
     function getLoaderHtml(text = 'INTERROGATING USB & ADB BUS', subtext = 'Enumerating hardware nodes and video pipelines...') {
       return `
-        <div class="diamt-loader-container">
-          <div class="diamt-loader-core">
-            <div class="diamt-orbit-ring outer"></div>
-            <div class="diamt-orbit-ring inner"></div>
-            <div class="diamt-core-emblem">
-              <svg viewBox="0 0 24 24" fill="none" class="diamt-core-svg">
+        <div class="flexpulse-loader-container">
+          <div class="flexpulse-loader-core">
+            <div class="flexpulse-orbit-ring outer"></div>
+            <div class="flexpulse-orbit-ring inner"></div>
+            <div class="flexpulse-core-emblem">
+              <svg viewBox="0 0 24 24" fill="none" class="flexpulse-core-svg">
                 <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </div>
           </div>
-          <div class="diamt-loader-brand">DIAMT <span style="color: #38bdf8;">SYSTEM</span></div>
-          <div class="diamt-loader-title"><span class="diamt-pulse-dot"></span>${text}</div>
-          <div class="diamt-loader-subtext">${subtext}</div>
+          <div class="flexpulse-loader-brand">Flexpulse <span style="color: #38bdf8;">SYSTEM</span></div>
+          <div class="flexpulse-loader-title"><span class="flexpulse-pulse-dot"></span>${text}</div>
+          <div class="flexpulse-loader-subtext">${subtext}</div>
         </div>
       `;
     }

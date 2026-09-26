@@ -1,6 +1,6 @@
 {
-  "name": "DIAMT Cloud Device Farm",
-  "short_name": "DIAMT",
+  "name": "Flexpulse Cloud Device Farm",
+  "short_name": "Flexpulse",
   "description": "Enterprise Real Hardware Android Device Farm Cloud Platform",
   "start_url": "/login",
   "display": "standalone",
@@ -11,6 +11,11 @@
       "src": "/favicon.svg",
       "sizes": "512x512",
       "type": "image/svg+xml"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ]
 }

@@ -104,8 +104,8 @@ export default function DeviceStore() {
 
   const faqs = [
     {
-      q: "What is DIAMT Device Rentals Marketplace?",
-      a: "DIAMT Device Marketplace lets you rent dedicated, real physical Android devices hosted on high-speed hardware nodes. Devices feature ultra-low latency WebRTC video streaming, full touchscreen remote control, and stealth routing."
+      q: "What is Flexpulse Device Rentals Marketplace?",
+      a: "Flexpulse Device Marketplace lets you rent dedicated, real physical Android devices hosted on high-speed hardware nodes. Devices feature ultra-low latency WebRTC video streaming, full touchscreen remote control, and stealth routing."
     },
     {
       q: "How fast is access activated after rental payment?",
@@ -117,7 +117,7 @@ export default function DeviceStore() {
     },
     {
       q: "Are the devices virtual emulators or real Android hardware?",
-      a: "All devices hosted on DIAMT are 100% real physical Android phones connected via high-speed USB 3.0 nodes with hardware acceleration."
+      a: "All devices hosted on Flexpulse are 100% real physical Android phones connected via high-speed USB 3.0 nodes with hardware acceleration."
     }
   ];
 

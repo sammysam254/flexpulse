@@ -309,7 +309,7 @@ export default function SeedAdminDashboard() {
 
         {loading ? (
           <div style={{ padding: '32px 0' }}>
-            <DiamtLoader text="RETRIEVING REGISTERED HARDWARE" subtext="Synchronizing devices from DIAMT cloud nodes..." size="small" />
+            <DiamtLoader text="RETRIEVING REGISTERED HARDWARE" subtext="Synchronizing devices from Flexpulse cloud nodes..." size="small" />
           </div>
         ) : devices.length === 0 ? (
           <div style={{ color: 'var(--text-muted)' }}>No devices registered yet.</div>

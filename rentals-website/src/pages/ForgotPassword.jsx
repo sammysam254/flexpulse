@@ -90,7 +90,7 @@ export default function ForgotPassword() {
   return (
     <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <SEO
-        title="Reset Password — DIAMT Device Rentals"
+        title="Reset Password — Flexpulse Device Rentals"
       />
       <div className="card" style={{ maxWidth: '440px', width: '100%', padding: '36px' }}>
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>

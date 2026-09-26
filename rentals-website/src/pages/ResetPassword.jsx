@@ -49,7 +49,7 @@ export default function ResetPassword() {
   return (
     <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <SEO
-        title="Set New Password — DIAMT Device Rentals"
+        title="Set New Password — Flexpulse Device Rentals"
       />
       <div className="card" style={{ maxWidth: '440px', width: '100%', padding: '36px' }}>
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
@@ -69,7 +69,7 @@ export default function ResetPassword() {
           </div>
           <h1 style={{ fontSize: '24px', fontWeight: 800 }}>Create New Password</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '6px' }}>
-            Choose a strong password for your DIAMT account
+            Choose a strong password for your Flexpulse account
           </p>
         </div>
 

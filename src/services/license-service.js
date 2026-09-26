@@ -161,12 +161,12 @@ function getSupabaseClient() {
  * Returns { isActive, mode, bindingCode, note }
  */
 async function checkLicenseStatus(bindingCode) {
-  // In standalone DIAMT cloud deployment, machines run autonomously without binding code licensing restrictions
+  // In standalone Flexpulse cloud deployment, machines run autonomously without binding code licensing restrictions
   return {
     isActive: true,
     mode: 'standalone',
-    bindingCode: bindingCode || 'DIAMT-STANDALONE',
-    note: 'DIAMT Active Standalone Mode',
+    bindingCode: bindingCode || 'Flexpulse-STANDALONE',
+    note: 'Flexpulse Active Standalone Mode',
   };
 }
 

@@ -26,11 +26,9 @@ export default function RentalsLayout({ children }) {
       {/* Mobile Top Header */}
       <header className="mobile-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'linear-gradient(135deg, #38bdf8, #a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fff', fontSize: '16px' }}>
-            ⚡
-          </div>
+          <img src="/favicon.svg" alt="Flexpulse" style={{ width: '32px', height: '32px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(56, 189, 248, 0.3)' }} />
           <div>
-            <div style={{ fontWeight: 800, fontSize: '15px', letterSpacing: '-0.3px', color: '#fff' }}>DIAMT</div>
+            <div style={{ fontWeight: 800, fontSize: '15px', letterSpacing: '-0.3px', color: '#fff' }}>Flexpulse</div>
             <div style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 700, lineHeight: 1 }}>RENTALS STORE</div>
           </div>
         </div>
@@ -53,11 +51,9 @@ export default function RentalsLayout({ children }) {
       <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`} style={{ padding: '24px 16px' }}>
         <div style={{ padding: '0 8px 24px', borderBottom: '1px solid var(--border-color)', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #38bdf8, #a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fff', fontSize: '18px' }}>
-              ⚡
-            </div>
+            <img src="/favicon.svg" alt="Flexpulse" style={{ width: '36px', height: '36px', borderRadius: '10px', boxShadow: '0 4px 12px rgba(56, 189, 248, 0.35)' }} />
             <div>
-              <div style={{ fontWeight: 800, fontSize: '16px', letterSpacing: '-0.3px' }}>DIAMT</div>
+              <div style={{ fontWeight: 800, fontSize: '16px', letterSpacing: '-0.3px' }}>Flexpulse</div>
               <div style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 700 }}>DEVICE RENTALS</div>
             </div>
           </div>

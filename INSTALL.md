@@ -1,4 +1,4 @@
-# DIAMT Agent — One-Click Installer
+# Flexpulse Agent — One-Click Installer
 
 ## What It Does
 
@@ -10,7 +10,7 @@ This single `.bat` file is all you need. When you run it, it will automatically:
 4. ✅ Setup the agent code
 5. ✅ Download scrcpy-server.jar for streaming
 6. ✅ Install all dependencies (npm packages + Electron)
-7. ✅ Launch the DIAMT agent and begin autonomous cloud device sync
+7. ✅ Launch the Flexpulse agent and begin autonomous cloud device sync
 
 
 ## Installation Steps

@@ -25,7 +25,7 @@ export default function SEO({
   useEffect(() => {
     // 1. Update Title
     if (title) {
-      document.title = title.includes('DIAMT') ? title : `${title} | DIAMT Rentals`;
+      document.title = title.includes('Flexpulse') ? title : `${title} | Flexpulse Rentals`;
     }
 
     // 2. Update Helper Meta Functions

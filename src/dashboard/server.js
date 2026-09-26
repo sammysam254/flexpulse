@@ -129,7 +129,7 @@ function startDashboardServer(port = 7400) {
 
     server = http.createServer(async (req, res) => {
       try {
-        // Enable CORS & Security headers (permitting frame embedding on diamt.cloud)
+        // Enable CORS & Security headers (permitting frame embedding on flexpulse.cloud)
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
       res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -338,7 +338,7 @@ function startDashboardServer(port = 7400) {
                 <div class="box">
                   <strong>Why am I seeing this?</strong><br>
                   • This device is plugged into a different computer (e.g. your remote USA host).<br>
-                  • To stream this remote device, open it via your DIAMT cloud dashboard once that host is running.
+                  • To stream this remote device, open it via your Flexpulse cloud dashboard once that host is running.
                 </div>
                 <a href="/" class="btn">View Local Dashboard</a>
               </div>

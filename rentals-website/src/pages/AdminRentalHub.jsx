@@ -163,7 +163,7 @@ export default function AdminRentalHub() {
   return (
     <RentalsLayout>
       <SEO
-        title="Admin Rental Control Hub — DIAMT"
+        title="Admin Rental Control Hub — Flexpulse"
         description="Super Admin rental management hub for setting rental rates and managing store releases."
         noIndex={true}
       />

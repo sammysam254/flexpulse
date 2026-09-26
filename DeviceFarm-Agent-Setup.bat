@@ -9,21 +9,21 @@ if /i not "%~dp0"=="%TEMP%\DeviceFarmSetup\" (
     exit /b !errorlevel!
 )
 
-title DIAMT Agent — Setup
+title Flexpulse Agent — Setup
 
 :: ═══════════════════════════════════════════════════════════════════════════
-::  DIAMT AGENT — ONE-CLICK INSTALLER
+::  Flexpulse AGENT — ONE-CLICK INSTALLER
 :: ═══════════════════════════════════════════════════════════════════════════
 
 echo.
 echo  ================================================================
-echo   DIAMT DESKTOP AGENT  ^|  One-Click Setup
+echo   Flexpulse DESKTOP AGENT  ^|  One-Click Setup
 echo  ================================================================
 echo.
 
 :: ── Where to install the agent ─────────────────────────────────────────────
 set "INSTALL_DIR=C:\DeviceFarmAgent"
-set "REPO_URL=https://github.com/sammysam254/DIAMT.git"
+set "REPO_URL=https://github.com/sammysam254/Flexpulse.git"
 set "CURRENT_DIR=%~dp0"
 if "%CURRENT_DIR:~-1%"=="\" set "CURRENT_DIR=%CURRENT_DIR:~0,-1%"
 
@@ -247,7 +247,7 @@ if not exist "node_modules\electron\dist\electron.exe" (
 :: ════════════════════════════════════════════════════════════════════════════
 echo.
 echo  ================================================================
-echo   STEP 6: DIAMT AUTONOMOUS SYSTEM INITIALIZATION
+echo   STEP 6: Flexpulse AUTONOMOUS SYSTEM INITIALIZATION
 echo  ================================================================
 echo.
 echo [*] Identifying system and establishing autonomous cloud sync...
@@ -353,7 +353,7 @@ start "" "http://localhost:7400"
 
 echo.
 echo  ================================================================
-echo  [OK] DIAMT Agent is running continuously in the background!
+echo  [OK] Flexpulse Agent is running continuously in the background!
 echo       Dashboard  : http://localhost:7400
 echo       Cloud Sync : Autonomous Direct Real-Time Cloud Sync
 echo       Install    : %INSTALL_DIR%
