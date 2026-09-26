@@ -332,9 +332,9 @@ class ScrcpyEngine extends EventEmitter {
       'cleanup=false',
       'send_dummy_byte=true',
       'video_source=display',
-      'video_bit_rate=2000000',
-      'max_size=1080',
-      'max_fps=40',
+      'video_bit_rate=1800000',
+      'max_size=840',
+      'max_fps=30',
       'video_codec_options=i-frame-interval=1',
       'send_frame_meta=true',
       'show_touches=false',
@@ -551,6 +551,9 @@ class ScrcpyEngine extends EventEmitter {
    * Zero-copy buffer slicing & minimal latency stream pipeline.
    */
   _pipeVideoToClients(socket) {
+    if (socket && typeof socket.setNoDelay === 'function') {
+      try { socket.setNoDelay(true); } catch (_) {}
+    }
     let buf = Buffer.alloc(0);
     let headerDone = false;
     let lastDataTime = Date.now();
@@ -747,8 +750,8 @@ class ScrcpyEngine extends EventEmitter {
   _broadcastVideo(payload, isKeyframe = false) {
     for (const ws of this.wsClients) {
       if (ws.readyState === 1) {
-        // Backpressure protection: drop delta frames if client send buffer is backed up (> 64KB)
-        if (ws.bufferedAmount > 64 * 1024 && !isKeyframe) {
+        // Generous backpressure window (1MB) to prevent frame drop on transient network latency over Cloudflare
+        if (ws.bufferedAmount > 1024 * 1024 && !isKeyframe) {
           continue;
         }
         try { ws.send(payload, { binary: true }); } catch (_) { this.wsClients.delete(ws); }

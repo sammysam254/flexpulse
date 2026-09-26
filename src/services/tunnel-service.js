@@ -146,7 +146,7 @@ function createCloudflaredTunnel(port) {
     }
 
     const args = token 
-      ? ['tunnel', 'run', '--token', token]
+      ? ['tunnel', '--protocol', 'http2', 'run', '--token', token]
       : ['tunnel', '--url', `http://127.0.0.1:${port}`, '--no-autoupdate', '--protocol', 'http2'];
 
     try {
@@ -157,7 +157,17 @@ function createCloudflaredTunnel(port) {
 
       if (token) {
         activeTokenTunnelProcess = tunnelProcess;
-        tunnelProcess.on('exit', () => { activeTokenTunnelProcess = null; });
+        tunnelProcess.on('exit', (code) => {
+          activeTokenTunnelProcess = null;
+          logger.warn(`[TunnelService] Cloudflare tunnel process exited (code=${code}). Reconnecting in 3s...`);
+          setTimeout(() => {
+            if (!activeTokenTunnelProcess) {
+              createCloudflaredTunnel(port).catch(err => {
+                logger.warn(`[TunnelService] Tunnel auto-reconnect notice: ${err.message}`);
+              });
+            }
+          }, 3000);
+        });
       }
 
       let resolved = false;

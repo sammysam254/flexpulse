@@ -270,16 +270,26 @@ function startDashboardServer(port = 7400) {
         const targetDev = findTargetDevice(rawSerial, actionParam);
 
         if (targetDev && targetDev.port) {
+          const forwardHeaders = { ...req.headers };
+          forwardHeaders.host = `127.0.0.1:${targetDev.port}`;
+          delete forwardHeaders['transfer-encoding'];
+          delete forwardHeaders['connection'];
+          delete forwardHeaders['keep-alive'];
+
           const proxyReq = http.request({
             hostname: '127.0.0.1',
             port: targetDev.port,
             path: req.url,
             method: req.method,
-            headers: req.headers,
+            headers: forwardHeaders,
             timeout: 15000,
           }, (proxyRes) => {
             if (!res.headersSent) {
-              res.writeHead(proxyRes.statusCode, proxyRes.headers);
+              const resHeaders = { ...proxyRes.headers };
+              delete resHeaders['transfer-encoding'];
+              delete resHeaders['connection'];
+              delete resHeaders['keep-alive'];
+              res.writeHead(proxyRes.statusCode, resHeaders);
             }
             proxyRes.pipe(res);
             proxyRes.on('error', () => { try { res.destroy(); } catch (_) {} });
@@ -390,17 +400,25 @@ function startDashboardServer(port = 7400) {
       const targetDev = findTargetDevice(serial, actionParam);
 
       if (targetDev && targetDev.port) {
+        const forwardHeaders = { ...req.headers };
+        forwardHeaders.host = `127.0.0.1:${targetDev.port}`;
+
         const proxyReq = http.request({
           hostname: '127.0.0.1',
           port: targetDev.port,
           path: req.url,
           method: 'GET',
-          headers: req.headers,
+          headers: forwardHeaders,
         });
 
         proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
           proxySocket.on('error', () => { try { socket.destroy(); proxySocket.destroy(); } catch (_) {} });
           socket.on('error', () => { try { proxySocket.destroy(); socket.destroy(); } catch (_) {} });
+
+          try {
+            if (typeof proxySocket.setNoDelay === 'function') proxySocket.setNoDelay(true);
+            if (typeof socket.setNoDelay === 'function') socket.setNoDelay(true);
+          } catch (_) {}
 
           socket.write(
             `HTTP/1.1 ${proxyRes.statusCode} ${proxyRes.statusMessage}\r\n` +
@@ -418,12 +436,18 @@ function startDashboardServer(port = 7400) {
         });
 
         proxyReq.on('error', (err) => {
-          try { socket.destroy(); } catch (_) {}
+          try {
+            socket.write('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n');
+            socket.end();
+          } catch (_) {}
         });
 
         proxyReq.end();
       } else {
-        try { socket.destroy(); } catch (_) {}
+        try {
+          socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+          socket.end();
+        } catch (_) {}
       }
     });
 

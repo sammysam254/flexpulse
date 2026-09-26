@@ -76,9 +76,12 @@ export default function MyDevices() {
           u.protocol = 'https:';
           u.host = 'agent.dennoh.site';
           u.searchParams.set('pin', unlockModal.access_password.trim());
+          if (user?.id) {
+            u.searchParams.set('user_id', user.id);
+          }
           streamUrl = u.toString();
         } catch (_) {
-          streamUrl = `https://agent.dennoh.site/?udid=${encodeURIComponent(unlockModal.devices?.serial || '')}&pin=${encodeURIComponent(unlockModal.access_password.trim())}`;
+          streamUrl = `https://agent.dennoh.site/?udid=${encodeURIComponent(unlockModal.devices?.serial || '')}&pin=${encodeURIComponent(unlockModal.access_password.trim())}${user?.id ? '&user_id=' + encodeURIComponent(user.id) : ''}`;
         }
         const w = 510, h = 900;
         const left = Math.max(0, Math.round((window.screen.width - w) / 2));

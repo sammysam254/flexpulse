@@ -179,40 +179,57 @@ function handleControl(type, data, serial, engine) {
 
 
 // ─── Server-Side Realtime Device Credential Verification (Redis-backed) ──────
+const BRUTE_FORCE_LOCKS = new Map(); // key: ip_serial -> { attempts, lockedUntil }
 
-async function verifyDeviceAccess(serial, inputCredential) {
-  if (!serial) return false;
+async function verifyDeviceAccess(serial, inputCredential, candidateUserId = null, clientIp = 'unknown') {
+  if (!serial) return { authorized: false, reason: 'Device UDID is required' };
   const input = (inputCredential || '').trim();
-  if (!input) return false;
+  if (!input) return { authorized: false, reason: 'Credential (PIN or token) required' };
 
-  // 1. Redis / in-memory cache check (30s TTL)
-  const cacheKey = `cred:${serial}:data`;
-  const cached = await cache.get(cacheKey);
-  if (cached) {
-    const { validKeys = [], validPins = [], status: devStatus } = cached;
-    if (devStatus === 'suspended' || devStatus === 'blocked' || devStatus === 'revoked') return false;
-    if (validPins.includes(input) || validKeys.includes(input)) return true;
-    for (const k of validKeys) { if (k.toLowerCase() === input.toLowerCase()) return true; }
-    // Cache hit but input not found — credential invalid
-    return false;
-  }
+  const lockKey = `${clientIp}_${serial}`;
+  const now = Date.now();
 
-  // 2. Cache miss — query Supabase
+  const recordFailure = () => {
+    const current = BRUTE_FORCE_LOCKS.get(lockKey) || { attempts: 0, lockedUntil: 0 };
+    current.attempts += 1;
+    if (current.attempts >= 5) {
+      current.lockedUntil = now + 2 * 60 * 1000; // 2 minute cooldown for repeated bad guesses
+      logger.warn(`[StreamService] IP ${clientIp} exceeded 5 failed attempts for ${serial}. Locked for 2 mins.`);
+    }
+    BRUTE_FORCE_LOCKS.set(lockKey, current);
+  };
+
+  const recordSuccess = () => {
+    BRUTE_FORCE_LOCKS.delete(lockKey);
+  };
+
+  // Check if currently locked out due to previous bad guesses
+  const lock = BRUTE_FORCE_LOCKS.get(lockKey);
+  const isCurrentlyLocked = (lock && lock.lockedUntil && lock.lockedUntil > now);
+
+  // 2. Query Supabase for latest device status and active rental
   const cfg = loadConfig();
   const supaUrl = cfg.supabaseUrl;
   const supaKey = cfg.supabaseServiceRoleKey || cfg.supabaseAnonKey;
-  if (!supaUrl || !supaKey) return false;
+  if (!supaUrl || !supaKey) return { authorized: false, reason: 'Backend service configuration missing' };
 
   try {
-    const res = await fetch(`${supaUrl.replace(/\/$/, '')}/rest/v1/devices?serial=eq.${encodeURIComponent(serial)}&select=id,status,stream_url`, {
+    // 2a. Fetch device record
+    const devRes = await fetch(`${supaUrl.replace(/\/$/, '')}/rest/v1/devices?serial=eq.${encodeURIComponent(serial)}&select=id,status,stream_url`, {
       headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` }
     });
-    if (!res.ok) return false;
-    const devices = await res.json();
-    if (!Array.isArray(devices) || devices.length === 0) return false;
+    if (!devRes.ok) { recordFailure(); return { authorized: false, reason: 'Device lookup failed' }; }
+    const devices = await devRes.json();
+    if (!Array.isArray(devices) || devices.length === 0) {
+      recordFailure();
+      return { authorized: false, reason: 'Device not recognized on this server' };
+    }
 
     const dev = devices[0];
     const devStatus = dev.status || 'online';
+    if (devStatus === 'suspended' || devStatus === 'blocked' || devStatus === 'revoked') {
+      return { authorized: false, reason: `Device stream is currently ${devStatus} by administrator.` };
+    }
 
     const validKeys = [];
     const validPins = [];
@@ -226,57 +243,63 @@ async function verifyDeviceAccess(serial, inputCredential) {
     if (matchPin)   validPins.push(decodeURIComponent(matchPin[1]).trim());
     if (matchToken) validKeys.push(decodeURIComponent(matchToken[1]).trim());
 
-    // Parse credentials from device_assignments.access_password
-    if (dev.id) {
-      try {
-        const aRes = await fetch(`${supaUrl.replace(/\/$/, '')}/rest/v1/device_assignments?device_id=eq.${encodeURIComponent(dev.id)}&select=access_password`, {
-          headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` }
-        });
-        if (aRes.ok) {
-          const assignments = await aRes.json();
-          if (Array.isArray(assignments)) {
-            for (const a of assignments) {
-              if (a.access_password) validPins.push(String(a.access_password).trim());
-            }
-          }
-        }
-      } catch (_) {}
-    }
+    // 2b. Check active rentals: verify user ownership and rental status
+    const rRes = await fetch(`${supaUrl.replace(/\/$/, '')}/rest/v1/device_rentals?serial_number=eq.${encodeURIComponent(serial)}&select=id,user_id,status,stream_url,expires_at`, {
+      headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` }
+    });
 
-    // Parse credentials from active device_rentals
-    try {
-      const rRes = await fetch(`${supaUrl.replace(/\/$/, '')}/rest/v1/device_rentals?serial_number=eq.${encodeURIComponent(serial)}&select=status,stream_url,expires_at`, {
-        headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` }
-      });
-      if (rRes.ok) {
-        const rentals = await rRes.json();
-        if (Array.isArray(rentals)) {
-          for (const r of rentals) {
-            if ((r.status === 'active' || r.status === 'paid') && !(r.expires_at && new Date(r.expires_at) < new Date())) {
-              const rUrl = r.stream_url || '';
-              const rKey   = rUrl.match(/[?&]key=([^&]+)/i);
-              const rPin   = rUrl.match(/[?&]pin=([^&]+)/i);
-              const rToken = rUrl.match(/[?&]token=([^&]+)/i);
-              if (rKey)   validKeys.push(decodeURIComponent(rKey[1]).trim());
-              if (rPin)   validPins.push(decodeURIComponent(rPin[1]).trim());
-              if (rToken) validKeys.push(decodeURIComponent(rToken[1]).trim());
+    if (rRes.ok) {
+      const rentals = await rRes.json();
+      if (Array.isArray(rentals) && rentals.length > 0) {
+        for (const r of rentals) {
+          const isExpired = r.expires_at && new Date(r.expires_at) < new Date();
+          if (r.status !== 'active' && r.status !== 'paid') {
+            continue;
+          }
+          if (isExpired) {
+            continue;
+          }
+
+          // If a candidateUserId is provided: check account ownership
+          if (candidateUserId) {
+            const isOwner = (r.user_id === candidateUserId || r.user_id === 'RENTAL_USER_DEFAULT');
+            if (!isOwner) {
+              logger.warn(`[StreamService] Account mismatch: requesting user ${candidateUserId} != rental owner ${r.user_id}`);
+              recordFailure();
+              return { authorized: false, reason: 'This device is assigned to another user account.' };
             }
           }
+
+          const rUrl = r.stream_url || '';
+          const rKey   = rUrl.match(/[?&]key=([^&]+)/i);
+          const rPin   = rUrl.match(/[?&]pin=([^&]+)/i);
+          const rToken = rUrl.match(/[?&]token=([^&]+)/i);
+          if (rKey)   validKeys.push(decodeURIComponent(rKey[1]).trim());
+          if (rPin)   validPins.push(decodeURIComponent(rPin[1]).trim());
+          if (rToken) validKeys.push(decodeURIComponent(rToken[1]).trim());
         }
       }
-    } catch (_) {}
+    }
 
-    // 3. Store in Redis / in-memory cache (30s TTL)
-    await cache.set(cacheKey, { validKeys, validPins, status: devStatus }, cache.TTL.CREDENTIALS);
+    // Check credentials
+    const isPinMatch = validPins.includes(input);
+    const isKeyMatch = validKeys.some(k => k.toLowerCase() === input.toLowerCase());
 
-    if (devStatus === 'suspended' || devStatus === 'blocked' || devStatus === 'revoked') return false;
-    if (validPins.includes(input) || validKeys.includes(input)) return true;
-    for (const k of validKeys) { if (k.toLowerCase() === input.toLowerCase()) return true; }
-    for (const p of validPins) { if (p === input) return true; }
-    return false;
+    if (isPinMatch || isKeyMatch) {
+      recordSuccess();
+      return { authorized: true };
+    }
+
+    if (isCurrentlyLocked) {
+      const waitSec = Math.ceil((lock.lockedUntil - now) / 1000);
+      return { authorized: false, reason: `Too many failed attempts. Device temporarily locked for ${waitSec}s.` };
+    }
+
+    recordFailure();
+    return { authorized: false, reason: 'Invalid or expired stream PIN/token. Please verify credentials in your account.' };
   } catch (err) {
     logger.warn(`[StreamService] Credential validation error for ${serial}: ${err.message}`);
-    return false;
+    return { authorized: false, reason: 'Verification service error' };
   }
 }
 
@@ -1704,6 +1727,8 @@ async function startStreamServer(serial, port) {
     const p   = url.pathname;
     const reqUdid = (url.searchParams.get('udid') || '').trim();
     const candidateAuth = (url.searchParams.get('pin') || url.searchParams.get('key') || url.searchParams.get('token') || '').trim();
+    const candidateUserId = (url.searchParams.get('user_id') || '').trim();
+    const remoteIp = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
 
     // 1. Bare domain or no UDID provided -> show the 5 auto-sliding cards presentation
     if (!reqUdid) {
@@ -1723,15 +1748,15 @@ async function startStreamServer(serial, port) {
     const effectiveSerial = targetSession.serial || serial;
     const effectiveEngine = targetSession.engine || engine;
 
-    // 3. Server-side token / PIN verification
-    const isAuthorized = await verifyDeviceAccess(effectiveSerial, candidateAuth);
-    if (!isAuthorized) {
+    // 3. Server-side token / PIN verification with user account binding
+    const authResult = await verifyDeviceAccess(effectiveSerial, candidateAuth, candidateUserId, remoteIp);
+    if (!authResult.authorized) {
       res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(buildVertexCardsHtml(
         effectiveSerial,
         candidateAuth,
         true,
-        `Access denied for ${effectiveSerial}. Valid server-confirmed PIN or access token required. If an administrator has reset your credentials, please enter the updated PIN.`
+        authResult.reason || `Access denied for ${effectiveSerial}. Valid server-confirmed PIN or access token required.`
       ));
       return;
     }
@@ -1781,9 +1806,16 @@ async function startStreamServer(serial, port) {
   const wss = new WebSocket.Server({ server, path: '/ws', perMessageDeflate: false });
 
   wss.on('connection', async (ws, req) => {
+    // Disable Nagle algorithm on the underlying TCP socket for immediate packet dispatch
+    if (req.socket && typeof req.socket.setNoDelay === 'function') {
+      try { req.socket.setNoDelay(true); } catch (_) {}
+    }
+
     const wsUrl = new URL(req.url, 'http://localhost');
     const reqWsUdid = (wsUrl.searchParams.get('udid') || '').trim();
     const candidateWsAuth = (wsUrl.searchParams.get('pin') || wsUrl.searchParams.get('key') || wsUrl.searchParams.get('token') || '').trim();
+    const candidateWsUserId = (wsUrl.searchParams.get('user_id') || '').trim();
+    const remoteIp = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
 
     if (!reqWsUdid) {
       ws.close(4000, 'Device UDID Required');
@@ -1800,30 +1832,30 @@ async function startStreamServer(serial, port) {
     const effectiveWsEngine = targetWsSession.engine || engine;
 
     // Check credential on initial WS connection
-    const isWsAuthorized = await verifyDeviceAccess(effectiveWsSerial, candidateWsAuth);
-    if (!isWsAuthorized) {
-      logger.warn(`[StreamServer] Unauthorized WS connection attempt for ${effectiveWsSerial}`);
+    const wsAuthResult = await verifyDeviceAccess(effectiveWsSerial, candidateWsAuth, candidateWsUserId, remoteIp);
+    if (!wsAuthResult.authorized) {
+      logger.warn(`[StreamServer] Unauthorized WS connection attempt for ${effectiveWsSerial}: ${wsAuthResult.reason}`);
       try {
-        ws.send(JSON.stringify({ type: 'stream_revoked', reason: 'Invalid or reset credentials' }));
+        ws.send(JSON.stringify({ type: 'stream_revoked', reason: wsAuthResult.reason }));
       } catch (_) {}
-      ws.close(4003, 'Unauthorized / Expired Credentials');
+      ws.close(4003, wsAuthResult.reason || 'Unauthorized / Expired Credentials');
       return;
     }
 
     logger.info(`[StreamServer] WS connected and authorized for ${effectiveWsSerial}`);
     effectiveWsEngine.addClient(ws);
 
-    // Heartbeat verification every 10 seconds: if admin resets PIN/key, revoke stream
+    // Heartbeat verification every 10 seconds: if admin resets PIN/key or rental expires, revoke stream
     const authWatcherTimer = setInterval(async () => {
-      const stillAuthorized = await verifyDeviceAccess(effectiveWsSerial, candidateWsAuth);
-      if (!stillAuthorized) {
-        logger.warn(`[StreamServer] Credentials revoked by admin for ${effectiveWsSerial}. Terminating active stream.`);
+      const check = await verifyDeviceAccess(effectiveWsSerial, candidateWsAuth, candidateWsUserId, remoteIp);
+      if (!check.authorized) {
+        logger.warn(`[StreamServer] Credentials revoked for ${effectiveWsSerial} (${check.reason}). Terminating active stream.`);
         try {
-          ws.send(JSON.stringify({ type: 'stream_revoked', reason: 'Credentials reset by admin' }));
+          ws.send(JSON.stringify({ type: 'stream_revoked', reason: check.reason }));
         } catch (_) {}
         clearInterval(authWatcherTimer);
         effectiveWsEngine.removeClient(ws);
-        ws.close(4003, 'Credentials Revoked');
+        ws.close(4003, check.reason || 'Credentials Revoked');
       }
     }, 10000);
 
