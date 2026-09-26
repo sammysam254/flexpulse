@@ -378,28 +378,6 @@ INSERT INTO public.device_rentals (
   ('197b7693-3043-4bc0-960d-f90d28a9edc0', 'YTCY999TVKVCZDZX', 'RENTAL_USER_DEFAULT', 'T513V', 'TCL', 30, 'USD', 'active', '11014040', 'https://stream.dennoh.site/?udid=YTCY999TVKVCZDZX&pin=11014040', NULL, '2026-08-13T18:29:53.117078+00:00', '2026-08-22T08:14:59.783+00:00', true),
   ('83ba0981-58c4-461b-87fc-4a99f5b29f1e', 'ZA223HQMXQ', 'RENTAL_USER_DEFAULT', 'moto g - 2025', 'motorola', 30, 'USD', 'active', '11014040', 'https://stream.dennoh.site/?udid=ZA223HQMXQ&pin=11014040', NULL, '2026-08-13T18:30:00.877127+00:00', '2026-08-22T08:15:00.051+00:00', true),
   ('8aa0c061-427a-466d-a4f2-1d306eb29719', 'ZA223HRJVF', 'RENTAL_USER_DEFAULT', 'moto g - 2025', 'motorola', 30, 'USD', 'active', '11014040', 'https://stream.dennoh.site/?udid=ZA223HRJVF&key=blazenexus6625cd&pin=823887', NULL, '2026-08-13T18:30:08.081505+00:00', '2026-08-22T08:15:00.279+00:00', true)
-ON CONFLICT (serial) DO UPDATE SET 
-  stream_url = EXCLUDED.stream_url,
-  status = EXCLUDED.status,
-  monthly_rental_price = EXCLUDED.monthly_rental_price,
-  is_available_for_rental = EXCLUDED.is_available_for_rental,
-  is_deleted_from_view = EXCLUDED.is_deleted_from_view;
-
--- 18. Import Device Rentals
-INSERT INTO public.device_rentals (
-  id, serial_number, user_id, device_model, device_brand, monthly_fee, 
-  currency, status, binding_code, stream_url, expires_at, created_at, updated_at, stealth_root_enabled
-) VALUES
-  ('9c82f5d4-ba5a-4cdd-b833-1bca1078468f', '1120308025024495', 'RENTAL_USER_DEFAULT', 'B170D', 'BLU', 30, 'USD', 'active', '11014040', 'https://dennoh.site/?udid=1120308025024495&pin=11014040', NULL, '2026-08-13T18:29:14.616059+00:00', '2026-08-22T08:14:58.306+00:00', true),
-  ('915461de-9b05-425a-b205-caf2b9050b77', '7070016025067254', 'RENTAL_USER_DEFAULT', 'B1660V', 'BLU', 30, 'USD', 'active', '11014040', 'https://dennoh.site/?udid=7070016025067254&pin=11014040', NULL, '2026-08-13T18:29:20.074044+00:00', '2026-08-22T08:14:58.527+00:00', true),
-  ('1e4c8a1d-0650-4bb9-8363-7741b6eeea43', 'M769UCQCDMZLPF8D', 'RENTAL_USER_DEFAULT', 'T513V', 'TCL', 30, 'USD', 'active', '11014040', 'https://dennoh.site/?udid=M769UCQCDMZLPF8D&pin=11014040', NULL, '2026-08-13T18:29:25.010403+00:00', '2026-08-22T08:14:58.731+00:00', true),
-  ('6099c73a-a215-4266-8ee4-68ece322df0e', 'NBIR5LAYORLRDU4T', 'RENTAL_USER_DEFAULT', 'T513V', 'TCL', 30, 'USD', 'active', '11014040', 'https://dennoh.site/?udid=NBIR5LAYORLRDU4T&pin=11014040', NULL, '2026-08-13T18:29:30.120813+00:00', '2026-08-22T08:14:58.948+00:00', true),
-  ('6e8c816f-d93d-44c3-9e19-b154cd595ab6', 'OBOFP75LXGV4EIJN', 'RENTAL_USER_DEFAULT', 'T513V', 'TCL', 30, 'USD', 'active', '11014040', 'https://dennoh.site/?udid=OBOFP75LXGV4EIJN&pin=11014040', NULL, '2026-08-13T18:29:35.421327+00:00', '2026-08-22T08:14:59.157+00:00', true),
-  ('281802d4-1d53-4394-aae4-7150ad05dd7f', 'V8RGXC5D5LMJJRQW', 'RENTAL_USER_DEFAULT', 'T513V', 'TCL', 30, 'USD', 'active', '11014040', 'https://dennoh.site/?udid=V8RGXC5D5LMJJRQW&pin=11014040', NULL, '2026-08-13T18:29:40.883034+00:00', '2026-08-22T08:14:59.366+00:00', true),
-  ('25af8c65-0770-4efa-a95b-56f1aea1ba2a', 'W45989YDRW8LIFYT', 'RENTAL_USER_DEFAULT', 'T513V', 'TCL', 30, 'USD', 'active', '11014040', 'https://dennoh.site/?udid=W45989YDRW8LIFYT&pin=11014040', NULL, '2026-08-13T18:29:47.048995+00:00', '2026-08-22T08:14:59.579+00:00', true),
-  ('197b7693-3043-4bc0-960d-f90d28a9edc0', 'YTCY999TVKVCZDZX', 'RENTAL_USER_DEFAULT', 'T513V', 'TCL', 30, 'USD', 'active', '11014040', 'https://dennoh.site/?udid=YTCY999TVKVCZDZX&pin=11014040', NULL, '2026-08-13T18:29:53.117078+00:00', '2026-08-22T08:14:59.783+00:00', true),
-  ('83ba0981-58c4-461b-87fc-4a99f5b29f1e', 'ZA223HQMXQ', 'RENTAL_USER_DEFAULT', 'moto g - 2025', 'motorola', 30, 'USD', 'active', '11014040', 'https://dennoh.site/?udid=ZA223HQMXQ&pin=11014040', NULL, '2026-08-13T18:30:00.877127+00:00', '2026-08-22T08:15:00.051+00:00', true),
-  ('8aa0c061-427a-466d-a4f2-1d306eb29719', 'ZA223HRJVF', 'RENTAL_USER_DEFAULT', 'moto g - 2025', 'motorola', 30, 'USD', 'active', '11014040', 'https://dennoh.site/?udid=ZA223HRJVF&key=blazenexus6625cd&pin=823887', NULL, '2026-08-13T18:30:08.081505+00:00', '2026-08-22T08:15:00.279+00:00', true)
 ON CONFLICT (serial_number) DO UPDATE SET 
   stream_url = EXCLUDED.stream_url,
   status = EXCLUDED.status,
