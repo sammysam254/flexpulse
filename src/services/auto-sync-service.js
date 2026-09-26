@@ -1,7 +1,9 @@
 'use strict';
 
+const fs = require('fs');
 const { execFile } = require('child_process');
 const path = require('path');
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
 let logger;
 try {
   logger = require('../utils/logger');
@@ -28,8 +30,6 @@ function resolveGitBin() {
   }
   return 'git';
 }
-
-const fs = require('fs');
 
 /**
  * Invalidate Node module cache for service files so updated code takes
@@ -58,26 +58,22 @@ function invalidateModuleCache() {
   }
 }
 
-/**
- * Silently check GitHub repository for updates and pull them without
- * restarting ADB, stopping WebSocket streams, or dropping active devices.
- */
 function checkAndSyncGithub() {
   return new Promise((resolve) => {
     const gitBin = resolveGitBin();
     logger.info('[AutoSync] Checking GitHub for updates (30-min background sync)...');
 
     // 1. Fetch remote origin/main
-    execFile(gitBin, ['fetch', 'origin', 'main'], { cwd: process.cwd(), timeout: 45000 }, (fetchErr) => {
+    execFile(gitBin, ['fetch', 'origin', 'main'], { cwd: REPO_ROOT, timeout: 45000 }, (fetchErr) => {
       if (fetchErr) {
         logger.warn(`[AutoSync] git fetch notice: ${fetchErr.message}`);
         return resolve(false);
       }
 
       // 2. Compare local HEAD hash vs origin/main hash
-      execFile(gitBin, ['rev-parse', 'HEAD'], { cwd: process.cwd() }, (err1, localHead) => {
+      execFile(gitBin, ['rev-parse', 'HEAD'], { cwd: REPO_ROOT }, (err1, localHead) => {
         if (err1) return resolve(false);
-        execFile(gitBin, ['rev-parse', 'origin/main'], { cwd: process.cwd() }, (err2, remoteHead) => {
+        execFile(gitBin, ['rev-parse', 'origin/main'], { cwd: REPO_ROOT }, (err2, remoteHead) => {
           if (err2) return resolve(false);
 
           const localHash = (localHead || '').trim();
@@ -87,11 +83,11 @@ function checkAndSyncGithub() {
             logger.info(`[AutoSync] New GitHub commit detected (${localHash.substring(0,7)} -> ${remoteHash.substring(0,7)}). Pulling changes silently...`);
 
             // 3. Pull changes cleanly into working copy
-            execFile(gitBin, ['pull', '--ff-only', 'origin', 'main'], { cwd: process.cwd(), timeout: 45000 }, (pullErr) => {
+            execFile(gitBin, ['pull', '--ff-only', 'origin', 'main'], { cwd: REPO_ROOT, timeout: 45000 }, (pullErr) => {
               const onUpdateSuccess = () => {
-                execFile(gitBin, ['clean', '-fd'], { cwd: process.cwd() }, () => {});
+                execFile(gitBin, ['clean', '-fd'], { cwd: REPO_ROOT }, () => {});
                 try {
-                  const wifiCache = path.join(process.cwd(), 'wifi-devices-cache.json');
+                  const wifiCache = path.join(REPO_ROOT, 'wifi-devices-cache.json');
                   if (fs.existsSync(wifiCache)) fs.unlinkSync(wifiCache);
                 } catch (_) {}
                 invalidateModuleCache();
@@ -107,7 +103,7 @@ function checkAndSyncGithub() {
 
               if (pullErr) {
                 // Fallback to reset --hard origin/main if untracked changes exist
-                execFile(gitBin, ['reset', '--hard', 'origin/main'], { cwd: process.cwd() }, (resetErr) => {
+                execFile(gitBin, ['reset', '--hard', 'origin/main'], { cwd: REPO_ROOT }, (resetErr) => {
                   if (resetErr) {
                     logger.warn(`[AutoSync] git reset notice: ${resetErr.message}`);
                   } else {
