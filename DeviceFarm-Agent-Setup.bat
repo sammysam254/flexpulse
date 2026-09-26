@@ -23,7 +23,7 @@ echo.
 
 :: ── Where to install the agent ─────────────────────────────────────────────
 set "INSTALL_DIR=C:\DeviceFarmAgent"
-set "REPO_URL=https://github.com/sammysam254/Flexpulse.git"
+set "REPO_URL=https://github.com/sammysam254/flexpulse.git"
 set "CURRENT_DIR=%~dp0"
 if "%CURRENT_DIR:~-1%"=="\" set "CURRENT_DIR=%CURRENT_DIR:~0,-1%"
 
@@ -35,15 +35,16 @@ echo [*] Install directory : %INSTALL_DIR%
 echo [*] Source repository : %REPO_URL%
 echo.
 
-:: ── Auto-close EVERYTHING before running (cloudflared, electron, scrcpy, adb, watchdog, port 7400) ──
-echo [*] Terminating all previous agent processes, tunnels, and releasing ports...
+:: ── Auto-close EVERYTHING before running (cloudflared, electron, scrcpy, adb, watchdog, port 7400, ports 8100-8900) ──
+echo [*] Terminating all previous agent processes, legacy folders, tunnels, and releasing ports...
 taskkill /F /IM cloudflared.exe /T >nul 2>&1
 taskkill /F /IM electron.exe /T >nul 2>&1
 taskkill /F /IM scrcpy.exe /T >nul 2>&1
 taskkill /F /IM adb.exe /T >nul 2>&1
 "%PS%" -NoProfile -ExecutionPolicy Bypass -Command ^
   "Get-NetTCPConnection -LocalPort 7400 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } catch {} };" ^
-  "Get-CimInstance Win32_Process | Where-Object { ($_.Name -like 'node*' -and $_.CommandLine -and ($_.CommandLine.IndexOf('service-watchdog.js') -ge 0 -or $_.CommandLine.IndexOf('DeviceFarm') -ge 0 -or $_.CommandLine.IndexOf('devicefarm-agent') -ge 0)) } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }" >nul 2>&1
+  "Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -ge 8100 -and $_.LocalPort -le 8900 } | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } catch {} };" ^
+  "Get-CimInstance Win32_Process | Where-Object { ($_.Name -like 'node*' -and $_.CommandLine -and ($_.CommandLine.IndexOf('service-watchdog.js') -ge 0 -or $_.CommandLine.IndexOf('DeviceFarm') -ge 0 -or $_.CommandLine.IndexOf('devicefarm-agent') -ge 0 -or $_.CommandLine.IndexOf('flexpulse') -ge 0 -or $_.CommandLine.IndexOf('diamt') -ge 0 -or $_.CommandLine.IndexOf('electron') -ge 0)) } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }" >nul 2>&1
 timeout /t 2 /nobreak >nul
 
 

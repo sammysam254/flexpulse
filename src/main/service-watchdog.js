@@ -25,10 +25,11 @@ function preLaunchCleanup() {
       try { fs.unlinkSync(wifiCache); } catch (_) {}
     }
 
-    // 2. Terminate any orphaned electron instances from prior crashes
+    // 2. Terminate any orphaned electron or cloudflared instances from prior crashes/folders
     if (process.platform === 'win32') {
       try {
         execSync('taskkill /F /IM electron.exe >nul 2>&1', { timeout: 3000, stdio: 'ignore' });
+        execSync('taskkill /F /IM cloudflared.exe >nul 2>&1', { timeout: 3000, stdio: 'ignore' });
       } catch (_) {}
     }
 
