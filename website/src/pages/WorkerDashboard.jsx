@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { Smartphone, Lock, Unlock, ExternalLink, RefreshCw, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import SEO from '../components/SEO';
 import DiamtLoader from '../components/DiamtLoader';
+import { normalizeStreamUrl } from '../lib/keyGenerator';
 
 export default function WorkerDashboard() {
   const { profile } = useAuth();
@@ -73,7 +74,7 @@ export default function WorkerDashboard() {
     setError(null);
 
     if (inputPassword.trim() === unlockModal.access_password.trim()) {
-      let streamUrl = unlockModal.devices?.stream_url;
+      let streamUrl = normalizeStreamUrl(unlockModal.devices?.stream_url, unlockModal.devices?.serial);
       if (streamUrl) {
         try {
           const u = new URL(streamUrl);
@@ -216,7 +217,7 @@ export default function WorkerDashboard() {
                     color: 'var(--text-muted)', wordBreak: 'break-all',
                     marginBottom: '14px', lineHeight: 1.5,
                   }}>
-                    {a.devices.stream_url.substring(0, 60)}...
+                    {normalizeStreamUrl(a.devices.stream_url, a.devices?.serial).substring(0, 60)}...
                   </div>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', color: 'var(--text-dim)', fontSize: '12px' }}>

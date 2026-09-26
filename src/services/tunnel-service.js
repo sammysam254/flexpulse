@@ -136,8 +136,8 @@ function createCloudflaredTunnel(port) {
 
     const currentCfg = loadConfig();
     const token = currentCfg.cloudflareToken || currentCfg.cloudflaredToken || currentCfg.token || process.env.CLOUDFLARE_TUNNEL_TOKEN || '';
-    const rawDomain = currentCfg.customDomain || currentCfg.domain || process.env.DEVICE_DOMAIN || '';
-    const domain = rawDomain ? rawDomain.replace(/^https?:\/\//, '').replace(/\/+$/, '') : '';
+    const rawDomain = currentCfg.customDomain || currentCfg.domain || process.env.DEVICE_DOMAIN || 'stream.dennoh.site';
+    const domain = (rawDomain ? rawDomain.replace(/^https?:\/\//, '').replace(/\/+$/, '') : '') || 'stream.dennoh.site';
 
     if (token && activeTokenTunnelProcess && activeTokenTunnelProcess.exitCode === null) {
       const publicUrl = `https://${domain}`;

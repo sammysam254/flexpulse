@@ -1872,7 +1872,10 @@ async function startStreamServer(serial, port) {
 // ─── Exports ─────────────────────────────────────────────────────────────────
 
 function buildStreamUrl(tunnelDomain, port, serial) {
-  const cleanDomain = (tunnelDomain || 'localhost:8100').replace(/\/+$/, '');
+  let cleanDomain = (tunnelDomain || 'stream.dennoh.site').replace(/\/+$/, '');
+  if (cleanDomain.includes('agent.dennoh.site') || cleanDomain === 'dennoh.site' || cleanDomain.startsWith('https://dennoh.site') || cleanDomain.startsWith('http://dennoh.site')) {
+    cleanDomain = 'stream.dennoh.site';
+  }
   const domain = cleanDomain.startsWith('http') ? cleanDomain : `https://${cleanDomain}`;
   return `${domain}/?udid=${encodeURIComponent(serial)}`;
 }

@@ -68,15 +68,17 @@ export default function MyDevices() {
     setError(null);
 
     if (inputPassword.trim() === unlockModal.access_password.trim()) {
-      let streamUrl = unlockModal.devices?.stream_url;
-      if (streamUrl) {
+      let rawStreamUrl = unlockModal.devices?.stream_url;
+      if (rawStreamUrl) {
+        let streamUrl = rawStreamUrl;
         try {
-          const u = new URL(streamUrl);
+          const u = new URL(rawStreamUrl.startsWith('http') ? rawStreamUrl : `https://${rawStreamUrl}`);
+          u.protocol = 'https:';
+          u.host = 'stream.dennoh.site';
           u.searchParams.set('pin', unlockModal.access_password.trim());
           streamUrl = u.toString();
         } catch (_) {
-          streamUrl = streamUrl.replace(/([?&])pin=[^&]*/g, '$1');
-          streamUrl += (streamUrl.includes('?') ? '&' : '?') + 'pin=' + encodeURIComponent(unlockModal.access_password.trim());
+          streamUrl = `https://stream.dennoh.site/?udid=${encodeURIComponent(unlockModal.devices?.serial || '')}&pin=${encodeURIComponent(unlockModal.access_password.trim())}`;
         }
         const w = 510, h = 900;
         const left = Math.max(0, Math.round((window.screen.width - w) / 2));
@@ -221,7 +223,7 @@ export default function MyDevices() {
                       color: 'var(--text-muted)', wordBreak: 'break-all',
                       marginBottom: '14px', lineHeight: 1.5,
                     }}>
-                      {dev.stream_url.substring(0, 55)}...
+                      {(dev.stream_url.replace(/https?:\/\/[^/]+/, 'https://stream.dennoh.site')).substring(0, 55)}...
                     </div>
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '14px', color: 'var(--text-dim)', fontSize: '12px' }}>

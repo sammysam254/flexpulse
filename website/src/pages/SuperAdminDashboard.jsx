@@ -7,7 +7,7 @@ import CctvWall from '../components/CctvWall';
 import DeviceAllocationSection from '../components/DeviceAllocationSection';
 import SystemLogsModal from '../components/SystemLogsModal';
 import DiamtLoader from '../components/DiamtLoader';
-import { generate16CharKey, generate6DigitPin, rotateUrlWithKeyAndPin } from '../lib/keyGenerator';
+import { generate16CharKey, generate6DigitPin, rotateUrlWithKeyAndPin, normalizeStreamUrl } from '../lib/keyGenerator';
 
 export default function SuperAdminDashboard() {
   const { profile } = useAuth();
@@ -285,7 +285,7 @@ export default function SuperAdminDashboard() {
                     <td style={{ padding: '14px 12px', fontFamily: 'monospace' }}>{d.serial}</td>
                     <td style={{ padding: '14px 12px', fontFamily: 'monospace', color: 'var(--primary)' }}>{d.binding_code || 'Unbound'}</td>
                     <td style={{ padding: '14px 12px', fontSize: '12px', fontFamily: 'monospace', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {d.stream_url || 'Generating Cloudflare link...'}
+                      {d.stream_url ? normalizeStreamUrl(d.stream_url, d.serial) : 'Generating Cloudflare link...'}
                     </td>
                     <td style={{ padding: '14px 12px', textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
@@ -309,17 +309,18 @@ export default function SuperAdminDashboard() {
                         </button>
                         {d.stream_url ? (
                           <a 
-                            href={d.stream_url} 
+                            href={normalizeStreamUrl(d.stream_url, d.serial)} 
                             target="_blank" 
                             rel="noreferrer" 
                             className="btn btn-primary" 
                             style={{ padding: '6px 12px', fontSize: '12px' }}
                             onClick={(e) => {
                               e.preventDefault();
+                              const targetUrl = normalizeStreamUrl(d.stream_url, d.serial);
                               const w = 510, h = 900;
                               const left = Math.max(0, Math.round((window.screen.width - w) / 2));
                               const top = Math.max(0, Math.round((window.screen.height - h) / 2));
-                              window.open(d.stream_url, `Stream_${d.serial || 'Device'}`, `width=${w},height=${h},top=${top},left=${left},resizable=yes,scrollbars=no,status=no,location=no,toolbar=no,menubar=no,popup=yes`);
+                              window.open(targetUrl, `Stream_${d.serial || 'Device'}`, `width=${w},height=${h},top=${top},left=${left},resizable=yes,scrollbars=no,status=no,location=no,toolbar=no,menubar=no,popup=yes`);
                             }}
                           >
                             Open Stream <ExternalLink size={12} />

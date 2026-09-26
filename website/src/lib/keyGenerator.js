@@ -22,9 +22,35 @@ export function generate6DigitPin() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Constructs stream URL with 16-character key and 6-digit PIN
+export const DEFAULT_STREAM_DOMAIN = import.meta.env.VITE_STREAM_DOMAIN || 'https://stream.dennoh.site';
+
+// Normalizes any device stream URL to ensure it always routes to stream.dennoh.site
+export function normalizeStreamUrl(url, serial) {
+  const baseDomain = (DEFAULT_STREAM_DOMAIN || 'https://stream.dennoh.site').replace(/\/+$/, '');
+  if (!url) {
+    return serial ? `${baseDomain}/?udid=${encodeURIComponent(serial)}` : baseDomain;
+  }
+  try {
+    const raw = url.startsWith('http') ? url : `https://${url}`;
+    const u = new URL(raw);
+    const target = new URL(baseDomain.startsWith('http') ? baseDomain : `https://${baseDomain}`);
+    
+    // Rewrite host if it points to dennoh.site, agent.dennoh.site, localhost, or old diamt host
+    if (u.hostname === 'agent.dennoh.site' || u.hostname === 'dennoh.site' || u.hostname.includes('diamt') || u.hostname.includes('localhost') || u.hostname.includes('127.0.0.1')) {
+      u.protocol = target.protocol;
+      u.host = target.host;
+    }
+    if (serial && !u.searchParams.get('udid')) {
+      u.searchParams.set('udid', serial);
+    }
+    return u.toString();
+  } catch (_) {
+    return serial ? `${baseDomain}/?udid=${encodeURIComponent(serial)}` : baseDomain;
+  }
+}
+
+// Constructs stream URL with 16-character key and 6-digit PIN strictly on stream.dennoh.site
 export function rotateUrlWithKeyAndPin(currentUrl, serial, newKey, newPin) {
-  const baseUrl = currentUrl ? currentUrl.split('?')[0] : (typeof window !== 'undefined' ? `${window.location.origin}/` : 'http://localhost:8100/');
-  const cleanBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  return `${cleanBase}?udid=${encodeURIComponent(serial)}&key=${encodeURIComponent(newKey)}&pin=${encodeURIComponent(newPin)}`;
+  const baseDomain = (DEFAULT_STREAM_DOMAIN || 'https://stream.dennoh.site').replace(/\/+$/, '');
+  return `${baseDomain}/?udid=${encodeURIComponent(serial)}&key=${encodeURIComponent(newKey)}&pin=${encodeURIComponent(newPin)}`;
 }

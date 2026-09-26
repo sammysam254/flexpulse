@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Video, Shield, Maximize2, RefreshCw, X, ArrowLeft, Eye, Play, Trash2 } from 'lucide-react';
+import { Video, Shield, Maximize2, RefreshCw, X, ArrowLeft, Eye, Play, Trash2, ExternalLink } from 'lucide-react';
+import { normalizeStreamUrl } from '../lib/keyGenerator';
 
 export default function CctvWall({ currentUser, isSuperAdmin, isSeedAdmin }) {
   const [devices, setDevices] = useState([]);
@@ -171,16 +172,7 @@ export default function CctvWall({ currentUser, isSuperAdmin, isSeedAdmin }) {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px' }}>
           {devices.map(d => {
-            const rawStreamUrl = d.stream_url;
-            let streamUrl = rawStreamUrl;
-            if (!streamUrl) {
-              streamUrl = `http://localhost:8100/?udid=${encodeURIComponent(d.serial || '')}`;
-            } else if (typeof window !== 'undefined' && window.location.protocol === 'https:' && streamUrl.startsWith('http://') && !streamUrl.includes('localhost') && !streamUrl.includes('127.0.0.1')) {
-              streamUrl = streamUrl.replace(/^http:/, 'https:');
-            }
-            if (d.serial && !streamUrl.includes('udid=')) {
-              streamUrl += (streamUrl.includes('?') ? '&' : '?') + `udid=${encodeURIComponent(d.serial)}`;
-            }
+            let streamUrl = normalizeStreamUrl(d.stream_url, d.serial);
             if (!streamUrl.includes('muted=')) {
               streamUrl += (streamUrl.includes('?') ? '&' : '?') + 'muted=1';
             }
@@ -291,10 +283,7 @@ export default function CctvWall({ currentUser, isSuperAdmin, isSeedAdmin }) {
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button 
                   onClick={() => {
-                    let u = focusDevice.stream_url;
-                    if (!u) u = `http://localhost:8100/?udid=${encodeURIComponent(focusDevice.serial || '')}`;
-                    else if (typeof window !== 'undefined' && window.location.protocol === 'https:' && u.startsWith('http://') && !u.includes('localhost') && !u.includes('127.0.0.1')) u = u.replace(/^http:/, 'https:');
-                    if (focusDevice.serial && !u.includes('udid=')) u += (u.includes('?') ? '&' : '?') + `udid=${encodeURIComponent(focusDevice.serial)}`;
+                    const u = normalizeStreamUrl(focusDevice.stream_url, focusDevice.serial);
                     const w = 510, h = 900;
                     const left = Math.max(0, Math.round((window.screen.width - w) / 2));
                     const top = Math.max(0, Math.round((window.screen.height - h) / 2));
@@ -314,13 +303,7 @@ export default function CctvWall({ currentUser, isSuperAdmin, isSeedAdmin }) {
             {/* Interactive Stream Frame */}
             <div style={{ flex: 1, background: '#000', position: 'relative' }}>
               <iframe 
-                src={(() => {
-                  let u = focusDevice.stream_url;
-                  if (!u) u = `http://localhost:8100/?udid=${encodeURIComponent(focusDevice.serial || '')}`;
-                  else if (typeof window !== 'undefined' && window.location.protocol === 'https:' && u.startsWith('http://') && !u.includes('localhost') && !u.includes('127.0.0.1')) u = u.replace(/^http:/, 'https:');
-                  if (focusDevice.serial && !u.includes('udid=')) u += (u.includes('?') ? '&' : '?') + `udid=${encodeURIComponent(focusDevice.serial)}`;
-                  return u;
-                })()} 
+                src={normalizeStreamUrl(focusDevice.stream_url, focusDevice.serial)} 
                 style={{ width: '100%', height: '100%', border: 'none' }} 
                 title="Focused Device Stream"
                 referrerPolicy="no-referrer"

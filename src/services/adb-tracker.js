@@ -177,9 +177,13 @@ async function handleDeviceAdd(device) {
 
     try {
       const activeCfg = loadConfig();
-      const rawCustomDomain = activeCfg.domain || activeCfg.customDomain || '';
-      const hasCustomDomain = Boolean(rawCustomDomain && !rawCustomDomain.includes('localhost') && !rawCustomDomain.includes('127.0.0.1'));
-      const cleanCustomDomain = hasCustomDomain ? rawCustomDomain.replace(/^https?:\/\//, '').replace(/\/+$/, '') : '';
+      const rawCustomDomain = activeCfg.domain || activeCfg.customDomain || 'stream.dennoh.site';
+      let cleanCustomDomain = (rawCustomDomain && !rawCustomDomain.includes('localhost') && !rawCustomDomain.includes('127.0.0.1'))
+        ? rawCustomDomain.replace(/^https?:\/\//, '').replace(/\/+$/, '')
+        : 'stream.dennoh.site';
+      if (cleanCustomDomain === 'dennoh.site' || cleanCustomDomain === 'agent.dennoh.site') {
+        cleanCustomDomain = 'stream.dennoh.site';
+      }
 
       const tunnel = await createTunnel(port);
       if (tunnel && tunnel.publicUrl) {

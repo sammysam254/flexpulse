@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Key, Smartphone, Users, Lock, CheckCircle, RefreshCw, Trash2, ExternalLink } from 'lucide-react';
-import { generate16CharKey, generate6DigitPin, rotateUrlWithKeyAndPin } from '../lib/keyGenerator';
+import { generate16CharKey, generate6DigitPin, rotateUrlWithKeyAndPin, normalizeStreamUrl } from '../lib/keyGenerator';
 
 export default function DeviceAllocationSection({ currentUser }) {
   const [devices, setDevices] = useState([]);
@@ -318,16 +318,17 @@ export default function DeviceAllocationSection({ currentUser }) {
                       <td style={{ padding: '14px 12px', fontSize: '12px', fontFamily: 'monospace' }}>
                         {a.devices?.stream_url ? (
                           <a 
-                            href={a.devices.stream_url} 
+                            href={normalizeStreamUrl(a.devices.stream_url, a.devices?.serial)} 
                             target="_blank" 
                             rel="noreferrer" 
                             style={{ color: 'var(--primary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             onClick={(e) => {
                               e.preventDefault();
+                              const targetUrl = normalizeStreamUrl(a.devices.stream_url, a.devices?.serial);
                               const w = 510, h = 900;
                               const left = Math.max(0, Math.round((window.screen.width - w) / 2));
                               const top = Math.max(0, Math.round((window.screen.height - h) / 2));
-                              window.open(a.devices.stream_url, `Stream_${a.devices?.serial || 'Device'}`, `width=${w},height=${h},top=${top},left=${left},resizable=yes,scrollbars=no,status=no,location=no,toolbar=no,menubar=no,popup=yes`);
+                              window.open(targetUrl, `Stream_${a.devices?.serial || 'Device'}`, `width=${w},height=${h},top=${top},left=${left},resizable=yes,scrollbars=no,status=no,location=no,toolbar=no,menubar=no,popup=yes`);
                             }}
                           >
                             Open Stream <ExternalLink size={12} />
