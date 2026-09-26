@@ -235,6 +235,18 @@ INSERT INTO auth.users (
   ('59427519-8043-4425-9e0b-019db51b1b2c', '00000000-0000-0000-0000-000000000000', 'cnahashon51@gmail.com', '$2a$10$LSIh3EmNSqoJ0W2D.YBjaOsKvGEc7NPaENT8FDv0eEzpbRgvOHfX6', '2026-08-13T23:04:00.567935+00:00', '2026-08-13T23:04:00.488645+00:00', '2026-08-22T07:16:31.299723+00:00', '{"provider": "email", "providers": ["email"]}'::jsonb, '{"email": "cnahashon51@gmail.com", "sub": "59427519-8043-4425-9e0b-019db51b1b2c", "email_verified": true, "phone_verified": false}'::jsonb, 'authenticated', 'authenticated')
 ON CONFLICT (id) DO NOTHING;
 
+-- Fix NULL token columns for all users so GoTrue's internal database scanner does not fail
+UPDATE auth.users SET 
+  confirmation_token = COALESCE(confirmation_token, ''),
+  recovery_token = COALESCE(recovery_token, ''),
+  email_change_token_new = COALESCE(email_change_token_new, ''),
+  email_change = COALESCE(email_change, ''),
+  email_change_token_current = COALESCE(email_change_token_current, ''),
+  phone = COALESCE(phone, ''),
+  phone_change = COALESCE(phone_change, ''),
+  phone_change_token = COALESCE(phone_change_token, ''),
+  reauthentication_token = COALESCE(reauthentication_token, '');
+
 -- 13. Ensure auth.identities exists for all users so email login functions seamlessly
 INSERT INTO auth.identities (
   id,
@@ -257,6 +269,10 @@ SELECT
   u.updated_at
 FROM auth.users u
 ON CONFLICT DO NOTHING;
+
+UPDATE auth.identities SET
+  identity_data = json_build_object('sub', user_id::text, 'email', (SELECT email FROM auth.users WHERE auth.users.id = auth.identities.user_id))::jsonb
+WHERE identity_data IS NULL OR identity_data = '{}'::jsonb;
 
 -- 14. Re-enable New User Trigger
 CREATE TRIGGER on_auth_user_created

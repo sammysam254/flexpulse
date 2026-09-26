@@ -50,7 +50,11 @@ export default function Login() {
         setTimeout(() => navigate('/worker'), 1800);
       }
     } catch (err) {
-      setError(err.message || 'Authentication failed');
+      let msg = err?.message || err?.msg || err?.error_description;
+      if (typeof msg === 'object' || !msg || msg === '{}' || msg === '[object Object]') {
+        msg = err?.error_description || err?.msg || 'Authentication failed. Please check your credentials or server connection.';
+      }
+      setError(msg);
       setLoading(false);
     }
   };
