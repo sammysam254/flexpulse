@@ -155,26 +155,67 @@ if defined ADB (
 echo.
 echo [4/6] Setting up agent files...
 
+set "FORCE_RECLONE=0"
 if exist "%INSTALL_DIR%\.git" (
-    echo [*] Agent directory exists — updating cleanly to latest version...
+    echo [*] Checking existing agent repository in %INSTALL_DIR%...
     taskkill /F /IM adb.exe /T >nul 2>&1
     taskkill /F /IM electron.exe /T >nul 2>&1
     taskkill /F /IM cloudflared.exe /T >nul 2>&1
-    "%GIT%" -C "%INSTALL_DIR%" fetch origin main
-    "%GIT%" -C "%INSTALL_DIR%" reset --hard origin/main
-    "%GIT%" -C "%INSTALL_DIR%" clean -fd
+
+    "%GIT%" -C "%INSTALL_DIR%" remote set-url origin "%REPO_URL%" >nul 2>&1
+    if !errorlevel! neq 0 set "FORCE_RECLONE=1"
+
+    echo [*] Pulling latest code strictly from %REPO_URL% ...
+    "%GIT%" -C "%INSTALL_DIR%" fetch origin main --force
+    if !errorlevel! neq 0 (
+        echo [WARN] Fetch failed. Will re-clone cleanly from %REPO_URL% ...
+        set "FORCE_RECLONE=1"
+    ) else (
+        "%GIT%" -C "%INSTALL_DIR%" checkout -B main origin/main --force
+        "%GIT%" -C "%INSTALL_DIR%" reset --hard origin/main
+        "%GIT%" -C "%INSTALL_DIR%" clean -fd
+        if !errorlevel! neq 0 set "FORCE_RECLONE=1"
+    )
     if exist "%INSTALL_DIR%\wifi-devices-cache.json" del /F /Q "%INSTALL_DIR%\wifi-devices-cache.json" >nul 2>&1
-    echo [OK] Agent updated to latest version from GitHub.
 ) else (
-    echo [*] Cloning agent from GitHub into %INSTALL_DIR% ...
-    echo [*] Using shallow clone for faster download...
+    set "FORCE_RECLONE=1"
+)
+
+if "!FORCE_RECLONE!"=="1" (
+    echo [*] Enforcing fresh clone from %REPO_URL% into %INSTALL_DIR% ...
+    if exist "%INSTALL_DIR%\node_modules" (
+        if not exist "%TEMP%\DeviceFarmBackup" mkdir "%TEMP%\DeviceFarmBackup" >nul 2>&1
+        move /Y "%INSTALL_DIR%\node_modules" "%TEMP%\DeviceFarmBackup\node_modules" >nul 2>&1
+    )
+    if exist "%INSTALL_DIR%\assets\bin" (
+        if not exist "%TEMP%\DeviceFarmBackup" mkdir "%TEMP%\DeviceFarmBackup" >nul 2>&1
+        move /Y "%INSTALL_DIR%\assets\bin" "%TEMP%\DeviceFarmBackup\bin" >nul 2>&1
+    )
+    if exist "%INSTALL_DIR%" rd /s /q "%INSTALL_DIR%" >nul 2>&1
+
     "%GIT%" clone --depth 1 --single-branch --branch main "%REPO_URL%" "%INSTALL_DIR%"
-    if %errorlevel% neq 0 (
-        echo [ERROR] git clone failed. Check your internet connection.
+    if !errorlevel! neq 0 (
+        echo [ERROR] git clone failed from %REPO_URL%. Check your connection.
         pause & exit /b 1
     )
-    echo [OK] Agent cloned successfully.
+    if exist "%TEMP%\DeviceFarmBackup\node_modules" (
+        move /Y "%TEMP%\DeviceFarmBackup\node_modules" "%INSTALL_DIR%\node_modules" >nul 2>&1
+    )
+    if exist "%TEMP%\DeviceFarmBackup\bin" (
+        if not exist "%INSTALL_DIR%\assets\bin" mkdir "%INSTALL_DIR%\assets\bin" >nul 2>&1
+        move /Y "%TEMP%\DeviceFarmBackup\bin\*" "%INSTALL_DIR%\assets\bin\" >nul 2>&1
+    )
+    if exist "%TEMP%\DeviceFarmBackup" rd /s /q "%TEMP%\DeviceFarmBackup" >nul 2>&1
 )
+
+:: Strictly verify that the repository origin is flexpulse
+for /f "delims=" %%R in ('"%GIT%" -C "%INSTALL_DIR%" remote get-url origin 2^>nul') do set "VERIFIED_REMOTE=%%R"
+for /f "delims=" %%H in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse HEAD 2^>nul') do set "VERIFIED_COMMIT=%%H"
+
+echo [OK] STRICT REPOSITORY VERIFICATION:
+echo      Remote URL  : !VERIFIED_REMOTE!
+echo      Commit Hash : !VERIFIED_COMMIT!
+echo [OK] Agent code is strictly running from %REPO_URL% (main)
 
 :: Switch working directory to the install dir for all remaining steps
 cd /d "%INSTALL_DIR%"

@@ -61,14 +61,17 @@ function invalidateModuleCache() {
 function checkAndSyncGithub() {
   return new Promise((resolve) => {
     const gitBin = resolveGitBin();
+    const TARGET_REPO = 'https://github.com/sammysam254/flexpulse.git';
     logger.info('[AutoSync] Checking GitHub for updates (30-min background sync)...');
 
-    // 1. Fetch remote origin/main
-    execFile(gitBin, ['fetch', 'origin', 'main'], { cwd: REPO_ROOT, timeout: 45000 }, (fetchErr) => {
-      if (fetchErr) {
-        logger.warn(`[AutoSync] git fetch notice: ${fetchErr.message}`);
-        return resolve(false);
-      }
+    // 0. Ensure origin remote points strictly to flexpulse repository
+    execFile(gitBin, ['remote', 'set-url', 'origin', TARGET_REPO], { cwd: REPO_ROOT }, () => {
+      // 1. Fetch remote origin/main
+      execFile(gitBin, ['fetch', 'origin', 'main'], { cwd: REPO_ROOT, timeout: 45000 }, (fetchErr) => {
+        if (fetchErr) {
+          logger.warn(`[AutoSync] git fetch notice: ${fetchErr.message}`);
+          return resolve(false);
+        }
 
       // 2. Compare local HEAD hash vs origin/main hash
       execFile(gitBin, ['rev-parse', 'HEAD'], { cwd: REPO_ROOT }, (err1, localHead) => {
@@ -122,6 +125,7 @@ function checkAndSyncGithub() {
           }
         });
       });
+    });
     });
   });
 }
