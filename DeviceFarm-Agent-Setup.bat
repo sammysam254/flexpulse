@@ -232,29 +232,46 @@ echo  ================================================================
 echo   REPOSITORY STATUS
 echo  ================================================================
 
-for /f "delims=" %%R in ('"%GIT%" -C "%INSTALL_DIR%" remote get-url origin 2^>nul') do (
-    echo   Remote URL     : %%R
-    set "FINAL_REMOTE=%%R"
+:: Get repository info with proper variable capture
+"%GIT%" -C "%INSTALL_DIR%" remote get-url origin > "%TEMP%\repo_url.txt" 2>nul
+"%GIT%" -C "%INSTALL_DIR%" rev-parse --abbrev-ref HEAD > "%TEMP%\repo_branch.txt" 2>nul
+"%GIT%" -C "%INSTALL_DIR%" rev-parse --short HEAD > "%TEMP%\repo_commit.txt" 2>nul
+
+set "FINAL_REMOTE="
+set "FINAL_BRANCH="
+set "FINAL_COMMIT="
+
+if exist "%TEMP%\repo_url.txt" (
+    set /p FINAL_REMOTE=<"%TEMP%\repo_url.txt"
+    del "%TEMP%\repo_url.txt" >nul 2>&1
 )
-for /f "delims=" %%B in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --abbrev-ref HEAD 2^>nul') do (
-    echo   Current Branch : %%B
+if exist "%TEMP%\repo_branch.txt" (
+    set /p FINAL_BRANCH=<"%TEMP%\repo_branch.txt"
+    del "%TEMP%\repo_branch.txt" >nul 2>&1
 )
-for /f "delims=" %%H in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --short HEAD 2^>nul') do (
-    echo   Commit Hash    : %%H
-    set "FINAL_COMMIT=%%H"
+if exist "%TEMP%\repo_commit.txt" (
+    set /p FINAL_COMMIT=<"%TEMP%\repo_commit.txt"
+    del "%TEMP%\repo_commit.txt" >nul 2>&1
 )
 
+echo   Remote URL     : !FINAL_REMOTE!
+echo   Current Branch : !FINAL_BRANCH!
+echo   Commit Hash    : !FINAL_COMMIT!
 echo  ================================================================
 echo.
 
-:: Verify repository is correct
+:: Verify we got the information
 if not defined FINAL_REMOTE (
-    echo [ERROR] Could not read repository information!
+    echo [ERROR] Could not read repository remote URL
+    echo [*] This might be a git configuration issue
+    echo [*] Install directory: %INSTALL_DIR%
     pause & exit /b 1
 )
 
 if not defined FINAL_COMMIT (
-    echo [ERROR] Could not read commit information!
+    echo [ERROR] Could not read repository commit
+    echo [*] This might be a git configuration issue
+    echo [*] Install directory: %INSTALL_DIR%
     pause & exit /b 1
 )
 
