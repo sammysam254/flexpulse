@@ -179,30 +179,16 @@ async function checkAndSyncGithub() {
 let syncTimer = null;
 
 /**
- * Start recurring 6-hour auto-sync loop (with night-time maintenance window).
+ * Auto-sync loop disabled per user requirement:
+ * No background GitHub checks, no automated restarts.
+ * Updates are applied manually when running Setup.bat so streams remain up 24/7.
  */
-function startAutoSync(intervalMs = 6 * 60 * 60 * 1000) {
-  if (syncTimer) clearInterval(syncTimer);
-
-  logger.info('[AutoSync] ═══════════════════════════════════════════════════');
-  logger.info('[AutoSync] AUTONOMOUS GITHUB SYNC SYSTEM INITIALIZED');
-  logger.info('[AutoSync] ═══════════════════════════════════════════════════');
-  logger.info('[AutoSync] Repository: https://github.com/sammysam254/flexpulse.git');
-  logger.info('[AutoSync] Branch: main');
-  logger.info('[AutoSync] Check interval: 6 hours (Night Maintenance Window: 00:00 - 06:00)');
-  logger.info('[AutoSync] First check: 60 seconds after startup');
-  logger.info('[AutoSync] Auto-restart: Night window ONLY (Never drops daytime worker streams)');
-  logger.info('[AutoSync] ═══════════════════════════════════════════════════');
-
-  // Initial check after 60 seconds of uptime (pulls code, but will NEVER restart during daytime)
-  setTimeout(() => {
-    checkAndSyncGithub().catch(() => {});
-  }, 60000);
-
-  // Recurring 6-hour interval check
-  syncTimer = setInterval(() => {
-    checkAndSyncGithub().catch(() => {});
-  }, intervalMs);
+function startAutoSync() {
+  if (syncTimer) {
+    clearInterval(syncTimer);
+    syncTimer = null;
+  }
+  logger.info('[AutoSync] Automated background GitHub checks are DISABLED (Manual updates only — streams remain 100% online 24/7)');
 }
 
 /**

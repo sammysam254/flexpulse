@@ -320,7 +320,6 @@ app.whenReady().then(async () => {
   // 2. Start ADB tracking, device connection, and cloud heartbeat asynchronously in background
   adbTracker.startTracking().catch(err => logger.error('ADB tracker error:', err));
   apiClient.startHeartbeat(() => processManager.getActiveSerials());
-  autoSync.startAutoSync(6 * 60 * 60 * 1000);
   startTrayRefreshInterval();
 
   // Initialize Real-time System Log Relay for admin monitoring

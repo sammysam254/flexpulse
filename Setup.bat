@@ -471,7 +471,7 @@ echo.
 echo  ================================================================
 echo  [OK] Flexpulse Agent is running continuously in the background!
 echo       Dashboard  : http://localhost:7400
-echo       Cloud Sync : Autonomous 6-Hour Nightly GitHub Auto-Update
+echo       Update Mode: Manual (Streams 100% Persistent 24/7, No Auto-Restarts)
 echo       Install    : %INSTALL_DIR%
 echo       Status     : Active 24/7 Background Service (Auto-starts on Boot)
 echo  ================================================================
