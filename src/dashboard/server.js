@@ -383,6 +383,38 @@ function startDashboardServer(port = 7400) {
                     res.end();
                     return;
                   }
+
+                  // If reported online in Supabase cloud, provide quick auto-retry connection screen
+                  if (matched.status === 'online') {
+                    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                    res.end(`
+                      <!DOCTYPE html>
+                      <html lang="en">
+                      <head>
+                        <meta charset="UTF-8">
+                        <meta http-equiv="refresh" content="3">
+                        <title>Connecting — ${requestedSerial}</title>
+                        <style>
+                          body { background: #060911; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+                          .card { background: #0f172a; border: 1px solid rgba(56,189,248,0.3); border-radius: 16px; padding: 32px 28px; text-align: center; max-width: 440px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+                          .spinner { width: 36px; height: 36px; border: 3px solid rgba(56,189,248,0.2); border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+                          @keyframes spin { to { transform: rotate(360deg); } }
+                          h3 { color: #38bdf8; margin: 0 0 8px; font-size: 18px; }
+                          p { color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 0; }
+                          code { background: rgba(255,255,255,0.08); color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+                        </style>
+                      </head>
+                      <body>
+                        <div class="card">
+                          <div class="spinner"></div>
+                          <h3>Routing to Live Stream...</h3>
+                          <p>Device <code>${requestedSerial}</code> is active on the farm hardware node. Establishing stream session...</p>
+                        </div>
+                      </body>
+                      </html>
+                    `);
+                    return;
+                  }
                 }
               }
             }

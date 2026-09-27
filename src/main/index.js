@@ -295,10 +295,18 @@ app.whenReady().then(async () => {
     const { url } = await startDashboardServer(7400);
     logger.info(`[Dashboard] DeviceFarm Agent Dashboard live at ${url}`);
 
-    // Immediately connect 24/7 Cloudflare Zero Trust tunnel for agent.dennoh.site
+    // Connect 24/7 Cloudflare Zero Trust tunnel for agent.dennoh.site only if physical devices are connected
     try {
-      const { createTunnel } = require('../services/tunnel-service');
-      createTunnel(7400).catch(tErr => logger.warn(`Tunnel setup notice: ${tErr.message}`));
+      const adb = require('@devicefarmer/adbkit');
+      const Adb = adb.Adb || adb.default || adb;
+      const adbClient = Adb.createClient();
+      const devList = await adbClient.listDevices().catch(() => []);
+      if (devList && devList.length > 0) {
+        const { createTunnel } = require('../services/tunnel-service');
+        createTunnel(7400).catch(tErr => logger.warn(`Tunnel setup notice: ${tErr.message}`));
+      } else {
+        logger.info('[Tunnel] No physical devices attached to this host — Cloudflare tunnel deferred to prevent conflicting with active farm nodes');
+      }
     } catch (_) {}
 
     const isHidden = process.argv.includes('--hidden') || process.env.BACKGROUND_SERVICE === '1';

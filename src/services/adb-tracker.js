@@ -222,6 +222,11 @@ async function handleDeviceAdd(device) {
 
     logger.info(`[OK] Stream URL for ${serial}: ${streamUrl}`);
 
+    // Ensure port 7400 Cloudflare Zero Trust tunnel is active on this host
+    try {
+      createTunnel(7400).catch(() => {});
+    } catch (_) {}
+
     // 7. Register with process manager (under both serial and realSerial if different)
     const sessionObj = {
       streamProcess,
