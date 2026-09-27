@@ -324,7 +324,7 @@ export default function DeviceAllocationSection({ currentUser }) {
                             style={{ color: 'var(--primary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             onClick={(e) => {
                               e.preventDefault();
-                              const targetUrl = normalizeStreamUrl(a.devices.stream_url, a.devices?.serial);
+                              const targetUrl = normalizeStreamUrl(a.devices.stream_url, a.devices?.serial, true);
                               const w = 510, h = 900;
                               const left = Math.max(0, Math.round((window.screen.width - w) / 2));
                               const top = Math.max(0, Math.round((window.screen.height - h) / 2));

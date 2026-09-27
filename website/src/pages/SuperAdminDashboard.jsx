@@ -316,7 +316,7 @@ export default function SuperAdminDashboard() {
                             style={{ padding: '6px 12px', fontSize: '12px' }}
                             onClick={(e) => {
                               e.preventDefault();
-                              const targetUrl = normalizeStreamUrl(d.stream_url, d.serial);
+                              const targetUrl = normalizeStreamUrl(d.stream_url, d.serial, true);
                               const w = 510, h = 900;
                               const left = Math.max(0, Math.round((window.screen.width - w) / 2));
                               const top = Math.max(0, Math.round((window.screen.height - h) / 2));

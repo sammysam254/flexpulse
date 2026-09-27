@@ -172,7 +172,7 @@ export default function CctvWall({ currentUser, isSuperAdmin, isSeedAdmin }) {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px' }}>
           {devices.map(d => {
-            let streamUrl = normalizeStreamUrl(d.stream_url, d.serial);
+            let streamUrl = normalizeStreamUrl(d.stream_url, d.serial, true);
             if (!streamUrl.includes('muted=')) {
               streamUrl += (streamUrl.includes('?') ? '&' : '?') + 'muted=1';
             }
@@ -283,7 +283,7 @@ export default function CctvWall({ currentUser, isSuperAdmin, isSeedAdmin }) {
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button 
                   onClick={() => {
-                    const u = normalizeStreamUrl(focusDevice.stream_url, focusDevice.serial);
+                    const u = normalizeStreamUrl(focusDevice.stream_url, focusDevice.serial, true);
                     const w = 510, h = 900;
                     const left = Math.max(0, Math.round((window.screen.width - w) / 2));
                     const top = Math.max(0, Math.round((window.screen.height - h) / 2));
@@ -303,7 +303,7 @@ export default function CctvWall({ currentUser, isSuperAdmin, isSeedAdmin }) {
             {/* Interactive Stream Frame */}
             <div style={{ flex: 1, background: '#000', position: 'relative' }}>
               <iframe 
-                src={normalizeStreamUrl(focusDevice.stream_url, focusDevice.serial)} 
+                src={normalizeStreamUrl(focusDevice.stream_url, focusDevice.serial, true)} 
                 style={{ width: '100%', height: '100%', border: 'none' }} 
                 title="Focused Device Stream"
                 referrerPolicy="no-referrer"

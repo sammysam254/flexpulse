@@ -387,7 +387,7 @@ function startDashboardServer(port = 7400) {
             }
           } catch (_) {}
 
-          // Clean, auto-reconnecting stream player (no binding code errors or locks)
+          // Clean device offline presentation (no infinite reload loop)
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(`
             <!DOCTYPE html>
@@ -395,25 +395,24 @@ function startDashboardServer(port = 7400) {
             <head>
               <meta charset="UTF-8">
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Connecting — ${requestedSerial}</title>
+              <title>Device Offline — ${requestedSerial}</title>
               <style>
                 body { background: #060911; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
-                .card { max-width: 460px; width: 100%; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 20px; padding: 36px 28px; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.6); }
-                .spinner { width: 44px; height: 44px; border: 3px solid rgba(56, 189, 248, 0.15); border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
-                @keyframes spin { to { transform: rotate(360deg); } }
-                h2 { color: #38bdf8; margin: 0 0 8px; font-size: 20px; font-weight: 700; }
+                .card { max-width: 480px; width: 100%; background: #0f172a; border: 1px solid rgba(248, 113, 113, 0.3); border-radius: 20px; padding: 36px 28px; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.6); }
+                .icon { font-size: 42px; margin-bottom: 12px; }
+                h2 { color: #f87171; margin: 0 0 8px; font-size: 20px; font-weight: 700; }
                 p { color: #94a3b8; font-size: 14px; line-height: 1.5; margin: 0 0 16px; }
                 code { background: rgba(255,255,255,0.08); color: #38bdf8; padding: 3px 8px; border-radius: 6px; font-family: monospace; font-size: 14px; }
-                .status-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); padding: 5px 12px; border-radius: 100px; font-size: 12px; color: #38bdf8; font-weight: 600; }
+                .btn { display: inline-block; padding: 10px 20px; background: #38bdf8; color: #020617; border-radius: 10px; font-size: 13px; font-weight: 700; text-decoration: none; cursor: pointer; border: none; }
               </style>
             </head>
             <body>
               <div class="card">
-                <div class="spinner"></div>
-                <h2>Connecting to Device Stream</h2>
-                <p>Initializing hardware video pipeline for <code>${requestedSerial}</code>...</p>
-                <div class="status-badge">Linking to Cloud Stream</div>
-                <script>setTimeout(() => location.reload(), 3000);</script>
+                <div class="icon">📱❌</div>
+                <h2>Device Currently Offline</h2>
+                <p>Device <code>${requestedSerial}</code> is not physically connected or running on this agent host.</p>
+                <p style="font-size: 13px; color: #64748b;">Please verify the device is powered on, connected via USB, and recognized by ADB on the host machine.</p>
+                <button onclick="location.reload()" class="btn">Check Again</button>
               </div>
             </body>
             </html>

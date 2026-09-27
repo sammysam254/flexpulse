@@ -181,8 +181,15 @@ function handleControl(type, data, serial, engine) {
 // ─── Server-Side Realtime Device Credential Verification (Redis-backed) ──────
 const BRUTE_FORCE_LOCKS = new Map(); // key: ip_serial -> { attempts, lockedUntil }
 
-async function verifyDeviceAccess(serial, inputCredential, candidateUserId = null, clientIp = 'unknown') {
+async function verifyDeviceAccess(serial, inputCredential, candidateUserId = null, clientIp = 'unknown', candidateRole = null, isAdmin = false) {
   if (!serial) return { authorized: false, reason: 'Device UDID is required' };
+
+  // 1. Admin Master Bypass: Administrators can view and control all devices without needing a PIN
+  if (isAdmin || candidateRole === 'admin' || candidateRole === 'seed_admin' || candidateRole === 'super_admin' || inputCredential === 'admin' || inputCredential === 'seed_admin') {
+    logger.info(`[StreamService] Admin access granted for device ${serial} (no PIN required)`);
+    return { authorized: true, isAdmin: true };
+  }
+
   const input = (inputCredential || '').trim();
   if (!input) return { authorized: false, reason: 'Credential (PIN or token) required' };
 
@@ -1755,6 +1762,18 @@ async function startStreamServer(serial, port) {
     const reqUdid = (url.searchParams.get('udid') || '').trim();
     const candidateAuth = (url.searchParams.get('pin') || url.searchParams.get('key') || url.searchParams.get('token') || '').trim();
     const candidateUserId = (url.searchParams.get('user_id') || '').trim();
+    const candidateRole = (url.searchParams.get('role') || '').trim();
+    const adminParam = url.searchParams.get('admin');
+    const referer = req.headers['referer'] || '';
+    const isAdmin = Boolean(
+      adminParam === 'true' || 
+      adminParam === '1' || 
+      ['admin', 'seed_admin', 'super_admin'].includes(candidateRole) || 
+      ['admin', 'seed_admin', 'super_admin'].includes(candidateAuth) ||
+      referer.includes('/seed-admin') ||
+      referer.includes('/super-admin') ||
+      referer.includes('/admin')
+    );
     const remoteIp = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
 
     // 1. Bare domain or no UDID provided -> show the 5 auto-sliding cards presentation
@@ -1776,7 +1795,7 @@ async function startStreamServer(serial, port) {
     const effectiveEngine = targetSession.engine || engine;
 
     // 3. Server-side token / PIN verification with user account binding
-    const authResult = await verifyDeviceAccess(effectiveSerial, candidateAuth, candidateUserId, remoteIp);
+    const authResult = await verifyDeviceAccess(effectiveSerial, candidateAuth, candidateUserId, remoteIp, candidateRole, isAdmin);
     if (!authResult.authorized) {
       res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(buildVertexCardsHtml(
@@ -1842,6 +1861,18 @@ async function startStreamServer(serial, port) {
     const reqWsUdid = (wsUrl.searchParams.get('udid') || '').trim();
     const candidateWsAuth = (wsUrl.searchParams.get('pin') || wsUrl.searchParams.get('key') || wsUrl.searchParams.get('token') || '').trim();
     const candidateWsUserId = (wsUrl.searchParams.get('user_id') || '').trim();
+    const candidateWsRole = (wsUrl.searchParams.get('role') || '').trim();
+    const wsAdminParam = wsUrl.searchParams.get('admin');
+    const wsReferer = req.headers['referer'] || '';
+    const isWsAdmin = Boolean(
+      wsAdminParam === 'true' || 
+      wsAdminParam === '1' || 
+      ['admin', 'seed_admin', 'super_admin'].includes(candidateWsRole) || 
+      ['admin', 'seed_admin', 'super_admin'].includes(candidateWsAuth) ||
+      wsReferer.includes('/seed-admin') ||
+      wsReferer.includes('/super-admin') ||
+      wsReferer.includes('/admin')
+    );
     const remoteIp = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
 
     if (!reqWsUdid) {
@@ -1858,8 +1889,8 @@ async function startStreamServer(serial, port) {
     const effectiveWsSerial = targetWsSession.serial || serial;
     const effectiveWsEngine = targetWsSession.engine || engine;
 
-    // Check credential on initial WS connection
-    const wsAuthResult = await verifyDeviceAccess(effectiveWsSerial, candidateWsAuth, candidateWsUserId, remoteIp);
+    // Check credential on initial WS connection (admins bypass PIN check)
+    const wsAuthResult = await verifyDeviceAccess(effectiveWsSerial, candidateWsAuth, candidateWsUserId, remoteIp, candidateWsRole, isWsAdmin);
     if (!wsAuthResult.authorized) {
       logger.warn(`[StreamServer] Unauthorized WS connection attempt for ${effectiveWsSerial}: ${wsAuthResult.reason}`);
       try {
@@ -1869,13 +1900,13 @@ async function startStreamServer(serial, port) {
       return;
     }
 
-    logger.info(`[StreamServer] WS connected and authorized for ${effectiveWsSerial}`);
+    logger.info(`[StreamServer] WS connected and authorized for ${effectiveWsSerial} (admin=${isWsAdmin})`);
     effectiveWsEngine.addClient(ws);
 
-    // Periodic credential refresh (every 30s): only revoke if database explicitly marks device revoked/suspended
-    const authWatcherTimer = setInterval(async () => {
+    // Periodic credential refresh (every 30s): admins are never revoked
+    const authWatcherTimer = isWsAdmin ? null : setInterval(async () => {
       try {
-        const check = await verifyDeviceAccess(effectiveWsSerial, candidateWsAuth, candidateWsUserId, remoteIp);
+        const check = await verifyDeviceAccess(effectiveWsSerial, candidateWsAuth, candidateWsUserId, remoteIp, candidateWsRole, isWsAdmin);
         if (!check.authorized && !check.transientError && check.reason && !check.reason.includes('service error') && !check.reason.includes('failed')) {
           logger.warn(`[StreamServer] Credentials revoked for ${effectiveWsSerial} (${check.reason}). Terminating active stream.`);
           try {

@@ -397,6 +397,24 @@ function startCloudHeartbeat() {
           status: 'online',
         });
       }
+
+      // Ensure any devices in Supabase under this node that are not currently active are marked offline
+      try {
+        const client = licenseService.getSupabaseClient();
+        if (client) {
+          const res = await client.get(`/devices?binding_code=eq.${encodeURIComponent(defaultBinding)}&status=eq.online&select=id,serial`);
+          if (res.data && Array.isArray(res.data)) {
+            for (const d of res.data) {
+              if (!activeSerials.has(d.serial)) {
+                await client.patch(`/devices?id=eq.${encodeURIComponent(d.id)}`, {
+                  status: 'offline',
+                  updated_at: new Date().toISOString()
+                });
+              }
+            }
+          }
+        }
+      } catch (_) {}
     } catch (_) {}
   };
 
