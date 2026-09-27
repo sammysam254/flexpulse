@@ -66,7 +66,7 @@ async function checkAndSyncGithub() {
   const TARGET_REPO = 'https://github.com/sammysam254/flexpulse.git';
 
   logger.info('[AutoSync] ═══════════════════════════════════════════════════');
-  logger.info('[AutoSync] Starting 30-minute GitHub background sync check...');
+  logger.info('[AutoSync] Starting 6-hour GitHub background sync check...');
 
   try {
     // First verify current repository configuration
@@ -123,16 +123,26 @@ async function checkAndSyncGithub() {
         invalidateModuleCache();
         logger.info('[AutoSync] ✓ GitHub changes applied successfully');
         logger.info('[AutoSync] ✓ Module cache invalidated');
-        logger.info('[AutoSync] Scheduling graceful restart in 3s...');
-        logger.info('[AutoSync] Watchdog will restart with latest code');
-        logger.info('[AutoSync] ═══════════════════════════════════════════════════');
-        setTimeout(() => {
-          try {
-            const { app } = require('electron');
-            if (app && app.quit) app.quit();
-          } catch (_) {}
-          process.exit(0);
-        }, 3000);
+
+        // Restrict restarts strictly to the night maintenance window (00:00 - 06:00 local time)
+        const hour = new Date().getHours();
+        const isNightWindow = (hour >= 0 && hour < 6);
+
+        if (isNightWindow) {
+          logger.info('[AutoSync] 🌙 Night maintenance window active (00:00 - 06:00). Scheduling restart in 5s...');
+          logger.info('[AutoSync] Watchdog will restart with latest code');
+          logger.info('[AutoSync] ═══════════════════════════════════════════════════');
+          setTimeout(() => {
+            try {
+              const { app } = require('electron');
+              if (app && app.quit) app.quit();
+            } catch (_) {}
+            process.exit(0);
+          }, 5000);
+        } else {
+          logger.info(`[AutoSync] ☀️ Daytime active (${new Date().toLocaleTimeString()}). Restart deferred to night maintenance window (00:00 - 06:00) so active worker device streams remain 100% uninterrupted.`);
+          logger.info('[AutoSync] ═══════════════════════════════════════════════════');
+        }
       };
 
       try {
@@ -169,9 +179,9 @@ async function checkAndSyncGithub() {
 let syncTimer = null;
 
 /**
- * Start recurring 30-minute auto-sync loop.
+ * Start recurring 6-hour auto-sync loop (with night-time maintenance window).
  */
-function startAutoSync(intervalMs = 30 * 60 * 1000) {
+function startAutoSync(intervalMs = 6 * 60 * 60 * 1000) {
   if (syncTimer) clearInterval(syncTimer);
 
   logger.info('[AutoSync] ═══════════════════════════════════════════════════');
@@ -179,17 +189,17 @@ function startAutoSync(intervalMs = 30 * 60 * 1000) {
   logger.info('[AutoSync] ═══════════════════════════════════════════════════');
   logger.info('[AutoSync] Repository: https://github.com/sammysam254/flexpulse.git');
   logger.info('[AutoSync] Branch: main');
-  logger.info('[AutoSync] Check interval: 30 minutes');
-  logger.info('[AutoSync] First check: 30 seconds after startup');
-  logger.info('[AutoSync] Auto-restart: Yes (on update detection)');
+  logger.info('[AutoSync] Check interval: 6 hours (Night Maintenance Window: 00:00 - 06:00)');
+  logger.info('[AutoSync] First check: 60 seconds after startup');
+  logger.info('[AutoSync] Auto-restart: Night window ONLY (Never drops daytime worker streams)');
   logger.info('[AutoSync] ═══════════════════════════════════════════════════');
 
-  // Initial check after 30 seconds of uptime
+  // Initial check after 60 seconds of uptime (pulls code, but will NEVER restart during daytime)
   setTimeout(() => {
     checkAndSyncGithub().catch(() => {});
-  }, 30000);
+  }, 60000);
 
-  // Recurring 30-minute interval check
+  // Recurring 6-hour interval check
   syncTimer = setInterval(() => {
     checkAndSyncGithub().catch(() => {});
   }, intervalMs);
