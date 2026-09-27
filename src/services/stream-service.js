@@ -935,9 +935,31 @@ function buildPlayerHtml(serial, screenW, screenH) {
     .mobile-nav{display:none !important}
     .stage{flex:1;display:flex;flex-direction:row !important;align-items:center;justify-content:center;gap:10px;width:100%;min-height:0;padding:6px 10px}
     canvas{display:block;max-height:calc(100vh - 55px);max-width:calc(100vw - 65px);width:auto;height:auto;cursor:default;touch-action:none;-webkit-tap-highlight-color:transparent}
+
+    /* ── Adaptive Quality Toast ── */
+    #qualityToast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(16px);background:rgba(8,12,24,.90);border:1px solid rgba(56,189,248,.30);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:#f1f5f9;font-family:system-ui,sans-serif;font-size:12.5px;font-weight:600;padding:8px 16px 8px 12px;border-radius:100px;display:flex;align-items:center;gap:8px;white-space:nowrap;z-index:9999;pointer-events:none;opacity:0;transition:opacity .35s ease,transform .35s ease;box-shadow:0 4px 24px rgba(0,0,0,.5)}
+    #qualityToast.qt-show{opacity:1;transform:translateX(-50%) translateY(0)}
+    .qt-icon{font-size:14px;line-height:1}
+    .qt-bars{display:flex;gap:3px;align-items:flex-end;height:14px}
+    .qt-bar{width:4px;border-radius:2px;background:rgba(255,255,255,.2);transition:background .3s,height .3s}
+    #qualityToast[data-q="high"] .qt-bar:nth-child(1){background:#38bdf8;height:6px}
+    #qualityToast[data-q="high"] .qt-bar:nth-child(2){background:#38bdf8;height:9px}
+    #qualityToast[data-q="high"] .qt-bar:nth-child(3){background:#38bdf8;height:14px}
+    #qualityToast[data-q="medium"] .qt-bar:nth-child(1){background:#f59e0b;height:6px}
+    #qualityToast[data-q="medium"] .qt-bar:nth-child(2){background:#f59e0b;height:9px}
+    #qualityToast[data-q="medium"] .qt-bar:nth-child(3){background:rgba(255,255,255,.2);height:14px}
+    #qualityToast[data-q="low"] .qt-bar:nth-child(1){background:#f87171;height:6px}
+    #qualityToast[data-q="low"] .qt-bar:nth-child(2){background:rgba(255,255,255,.2);height:9px}
+    #qualityToast[data-q="low"] .qt-bar:nth-child(3){background:rgba(255,255,255,.2);height:14px}
   </style>
 </head>
 <body>
+<!-- Adaptive Quality Toast (YouTube-style, harmless) -->
+<div id="qualityToast" data-q="high">
+  <span class="qt-icon" id="qtIcon">📶</span>
+  <span id="qtMsg">Adapting stream quality...</span>
+  <span class="qt-bars"><span class="qt-bar"></span><span class="qt-bar"></span><span class="qt-bar"></span></span>
+</div>
 
 <!-- Header Bar -->
 <div class="header">
@@ -1374,6 +1396,10 @@ function buildPlayerHtml(serial, screenW, screenH) {
             console.warn('[Stream] Stream status notice:', msg.reason);
             // Do not reload — keep session alive
             return;
+          } else if (msg.type === 'adaptive_quality') {
+            // YouTube-style quality toast -- harmless, never drops stream
+            showQualityToast(msg.quality, msg.message, msg.icon);
+            return;
           }
           return;
         } catch (_) {}
@@ -1491,6 +1517,25 @@ function buildPlayerHtml(serial, screenW, screenH) {
   }
 
   // ── Control: WS-only, never fetch ───────────────────────────────────────
+  // -- Adaptive Quality Toast --
+  var _qtTimer = null;
+  function showQualityToast(quality, message, icon) {
+    var toast = document.getElementById('qualityToast');
+    var msgEl = document.getElementById('qtMsg');
+    var iconEl = document.getElementById('qtIcon');
+    if (!toast) return;
+    if (_qtTimer) { clearTimeout(_qtTimer); _qtTimer = null; }
+    toast.setAttribute('data-q', quality || 'high');
+    if (msgEl) msgEl.textContent = message || 'Adapting stream quality...';
+    if (iconEl) iconEl.textContent = icon || '\ud83d\udcf6';
+    toast.classList.add('qt-show');
+    // Auto-dismiss after 4 seconds -- harmless
+    _qtTimer = setTimeout(function() {
+      toast.classList.remove('qt-show');
+      _qtTimer = null;
+    }, 4000);
+  }
+
   const ctrlQueue = [];
   function flushQueue() {
     while (ctrlQueue.length && ws && ws.readyState === 1)

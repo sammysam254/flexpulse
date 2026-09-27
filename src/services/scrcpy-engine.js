@@ -251,6 +251,11 @@ class ScrcpyEngine extends EventEmitter {
    */
   addClient(ws) {
     ws._needsKeyframe = false;
+    ws._qualityLevel = 'high'; // 'high' | 'medium' | 'low'
+    ws._frameCounter = 0;
+    ws._lastQualityChange = Date.now();
+    ws._congestedCount = 0;
+    ws._healthyCount = 0;
     this.wsClients.add(ws);
     // Send cached SPS/PPS config & IDR keyframe immediately so WebCodecs decodes instantly
     const initialPacket = this._keyframeBuffer || this._configPacket;
@@ -765,32 +770,136 @@ class ScrcpyEngine extends EventEmitter {
     payload.copy(audioFrame, 2);
 
     for (const ws of this.wsClients) {
-      if (ws.readyState === 1 && ws.bufferedAmount < 64 * 1024 && !ws._needsKeyframe) {
+      if (ws.readyState === 1 && ws.bufferedAmount < 48 * 1024 && !ws._needsKeyframe) {
+        // In low-quality mode, skip audio data packets to conserve bandwidth for screen interactivity
+        if (ws._qualityLevel === 'low') continue;
         try { ws.send(audioFrame, { binary: true }); } catch (_) {}
       }
     }
   }
 
   _broadcastVideo(payload, isKeyframe = false) {
+    const now = Date.now();
+
     for (const ws of this.wsClients) {
-      if (ws.readyState === 1) {
-        // Real-time low-latency buffer ceiling (64KB ~0.5s): prevents latency queue from building up over Cloudflare
-        if (ws.bufferedAmount > 64 * 1024) {
+      if (ws.readyState !== 1) {
+        this.wsClients.delete(ws);
+        continue;
+      }
+
+      if (!ws._qualityLevel) {
+        ws._qualityLevel = 'high';
+        ws._frameCounter = 0;
+        ws._lastQualityChange = now;
+        ws._congestedCount = 0;
+        ws._healthyCount = 0;
+      }
+
+      ws._frameCounter = (ws._frameCounter + 1) % 10000;
+      const bufLen = ws.bufferedAmount || 0;
+
+      // ── Adaptive Bitrate / Quality Evaluation (YouTube-Style) ──
+      // Evaluate on keyframes with at least 3.5s cooldown between quality changes
+      if (isKeyframe && (now - ws._lastQualityChange > 3500)) {
+        if (bufLen > 50 * 1024) {
+          // Severe congestion / buffer bloat: step down to low
+          ws._congestedCount = (ws._congestedCount || 0) + 1;
+          ws._healthyCount = 0;
+          if (ws._qualityLevel !== 'low' && ws._congestedCount >= 2) {
+            ws._qualityLevel = 'low';
+            ws._lastQualityChange = now;
+            ws._needsKeyframe = true;
+            this._notifyClientQuality(ws, 'low', 'Adapting to lower quality stream because of speed...', '📶');
+          }
+        } else if (bufLen > 20 * 1024) {
+          // Moderate latency / congestion: step down to medium
+          ws._congestedCount = (ws._congestedCount || 0) + 1;
+          ws._healthyCount = 0;
+          if (ws._qualityLevel === 'high' && ws._congestedCount >= 2) {
+            ws._qualityLevel = 'medium';
+            ws._lastQualityChange = now;
+            this._notifyClientQuality(ws, 'medium', 'Adapting to standard quality (optimizing for network speed)...', '📶');
+          }
+        } else if (bufLen === 0) {
+          // Clean, fast socket: step up
+          ws._healthyCount = (ws._healthyCount || 0) + 1;
+          ws._congestedCount = 0;
+
+          if (ws._qualityLevel === 'low' && ws._healthyCount >= 3) {
+            ws._qualityLevel = 'medium';
+            ws._lastQualityChange = now;
+            ws._healthyCount = 0;
+            this._notifyClientQuality(ws, 'medium', 'Connection improving — adapting stream quality...', '⚡');
+          } else if (ws._qualityLevel === 'medium' && ws._healthyCount >= 5) {
+            ws._qualityLevel = 'high';
+            ws._lastQualityChange = now;
+            ws._healthyCount = 0;
+            this._notifyClientQuality(ws, 'high', 'Connection stable — adapting to high quality stream', '⚡');
+          }
+        }
+      }
+
+      // ── Stream-Preserving Frame Delivery ──
+      // Keyframes (IDR / SPS / PPS) are ALWAYS sent unconditionally so decoder never desyncs!
+      if (!isKeyframe) {
+        // Immediate buffer safety: if buffer exceeds 80KB, drop delta frames until next keyframe
+        if (bufLen > 80 * 1024) {
           ws._needsKeyframe = true;
         }
 
-        // If client fell behind, drop delta frames to instantly drain buffer
         if (ws._needsKeyframe) {
-          if (!isKeyframe) {
-            continue;
-          }
-          // Keyframe (with SPS/PPS) arrived: deliver immediately and reset catch-up flag
-          ws._needsKeyframe = false;
+          continue;
         }
 
-        try { ws.send(payload, { binary: true }); } catch (_) { this.wsClients.delete(ws); }
+        // Adaptive decimation without breaking stream:
+        // 'high': send all frames (100%)
+        // 'medium': send every 2nd frame (50% reduction in bandwidth)
+        // 'low': send every 4th frame (75% reduction in bandwidth)
+        if (ws._qualityLevel === 'medium' && (ws._frameCounter % 2 !== 0)) {
+          continue;
+        }
+        if (ws._qualityLevel === 'low' && (ws._frameCounter % 4 !== 0)) {
+          continue;
+        }
       } else {
+        // Fresh keyframe delivered: clear catch-up flag
+        ws._needsKeyframe = false;
+      }
+
+      try {
+        ws.send(payload, { binary: true });
+      } catch (_) {
         this.wsClients.delete(ws);
+      }
+    }
+  }
+
+  _notifyClientQuality(ws, quality, message, icon) {
+    if (ws && ws.readyState === 1) {
+      try {
+        ws.send(JSON.stringify({
+          type: 'adaptive_quality',
+          quality,
+          message,
+          icon
+        }));
+      } catch (_) {}
+    }
+  }
+
+  handleNetworkReport(ws, data) {
+    if (!ws || ws.readyState !== 1) return;
+    const now = Date.now();
+    if (data && data.lag && (now - (ws._lastQualityChange || 0) > 3000)) {
+      if (ws._qualityLevel === 'high') {
+        ws._qualityLevel = 'medium';
+        ws._lastQualityChange = now;
+        this._notifyClientQuality(ws, 'medium', 'Adapting to standard quality (optimizing for network speed)...', '📶');
+      } else if (ws._qualityLevel === 'medium') {
+        ws._qualityLevel = 'low';
+        ws._lastQualityChange = now;
+        ws._needsKeyframe = true;
+        this._notifyClientQuality(ws, 'low', 'Adapting to lower quality stream because of speed...', '📶');
       }
     }
   }
