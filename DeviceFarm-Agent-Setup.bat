@@ -31,8 +31,14 @@ if "%CURRENT_DIR:~-1%"=="\" set "CURRENT_DIR=%CURRENT_DIR:~0,-1%"
 set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 if not exist "%PS%" set "PS=%SystemRoot%\SysWOW64\WindowsPowerShell\v1.0\powershell.exe"
 
-echo [*] Install directory : %INSTALL_DIR%
-echo [*] Source repository : %REPO_URL%
+echo.
+echo  ----------------------------------------------------------------
+echo   Configuration:
+echo  ----------------------------------------------------------------
+echo   Install directory : %INSTALL_DIR%
+echo   Source repository : %REPO_URL%
+echo   Repository branch : main
+echo  ----------------------------------------------------------------
 echo.
 
 :: ── Auto-close EVERYTHING before running (cloudflared, electron, scrcpy, adb, watchdog, port 7400, ports 8100-8900) ──
@@ -158,10 +164,23 @@ echo [4/6] Setting up agent files...
 set "FORCE_RECLONE=0"
 if exist "%INSTALL_DIR%\.git" (
     echo [*] Checking existing agent repository in %INSTALL_DIR%...
+    
+    echo [*] Verifying current repository configuration...
+    for /f "delims=" %%C in ('"%GIT%" -C "%INSTALL_DIR%" remote get-url origin 2^>nul') do (
+        echo [*] Current repository: %%C
+    )
+    for /f "delims=" %%D in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --abbrev-ref HEAD 2^>nul') do (
+        echo [*] Current branch: %%D
+    )
+    for /f "delims=" %%E in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --short HEAD 2^>nul') do (
+        echo [*] Current commit: %%E
+    )
+    
     taskkill /F /IM adb.exe /T >nul 2>&1
     taskkill /F /IM electron.exe /T >nul 2>&1
     taskkill /F /IM cloudflared.exe /T >nul 2>&1
 
+    echo [*] Enforcing repository URL to: %REPO_URL%
     "%GIT%" -C "%INSTALL_DIR%" remote set-url origin "%REPO_URL%" >nul 2>&1
     if !errorlevel! neq 0 set "FORCE_RECLONE=1"
 
@@ -211,11 +230,29 @@ if "!FORCE_RECLONE!"=="1" (
 :: Strictly verify that the repository origin is flexpulse
 for /f "delims=" %%R in ('"%GIT%" -C "%INSTALL_DIR%" remote get-url origin 2^>nul') do set "VERIFIED_REMOTE=%%R"
 for /f "delims=" %%H in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse HEAD 2^>nul') do set "VERIFIED_COMMIT=%%H"
+for /f "delims=" %%B in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --abbrev-ref HEAD 2^>nul') do set "VERIFIED_BRANCH=%%B"
 
-echo [OK] STRICT REPOSITORY VERIFICATION:
-echo      Remote URL  : !VERIFIED_REMOTE!
-echo      Commit Hash : !VERIFIED_COMMIT!
+echo.
+echo  ================================================================
+echo   STRICT REPOSITORY VERIFICATION
+echo  ================================================================
+echo   Remote URL     : !VERIFIED_REMOTE!
+echo   Current Branch : !VERIFIED_BRANCH!
+echo   Commit Hash    : !VERIFIED_COMMIT!
+echo   Expected Repo  : %REPO_URL%
+echo  ================================================================
+echo.
+
+if /i not "!VERIFIED_REMOTE!"=="%REPO_URL%" (
+    echo [ERROR] Repository mismatch detected!
+    echo [ERROR] Expected: %REPO_URL%
+    echo [ERROR] Got:      !VERIFIED_REMOTE!
+    echo [*] Forcing re-clone from correct repository...
+    set "FORCE_RECLONE=1"
+    goto :force_correct_repo
+)
 echo [OK] Agent code is strictly running from %REPO_URL% (main)
+:force_correct_repo
 
 :: Switch working directory to the install dir for all remaining steps
 cd /d "%INSTALL_DIR%"
