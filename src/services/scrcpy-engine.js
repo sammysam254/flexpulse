@@ -327,15 +327,15 @@ class ScrcpyEngine extends EventEmitter {
       'tunnel_forward=true',
       'audio=' + (this.enableAudio ? 'true' : 'false'),
       'audio_codec=opus',
-      'audio_bit_rate=128000',
+      'audio_bit_rate=64000',
       'control=true',
       'cleanup=false',
       'send_dummy_byte=true',
       'video_source=display',
-      'video_bit_rate=1800000',
+      'video_bit_rate=1200000',
       'max_size=840',
       'max_fps=30',
-      'video_codec_options=i-frame-interval=1',
+      'video_codec_options=i-frame-interval=2',
       'send_frame_meta=true',
       'show_touches=false',
       'stay_awake=true',
@@ -732,8 +732,6 @@ class ScrcpyEngine extends EventEmitter {
   }
 
   _broadcastAudio(payload) {
-    // Frame layout: [0x41][codec_byte][...payload]
-    // codec_byte: 0x4F ('O') = opus, 0x52 ('R') = raw PCM
     const codec = (this._audioCodec === 'opus') ? 0x4F : 0x52;
     const audioFrame = Buffer.allocUnsafe(2 + payload.length);
     audioFrame[0] = 0x41; // 'A' = audio frame tag
@@ -741,7 +739,7 @@ class ScrcpyEngine extends EventEmitter {
     payload.copy(audioFrame, 2);
 
     for (const ws of this.wsClients) {
-      if (ws.readyState === 1 && ws.bufferedAmount < 128 * 1024) {
+      if (ws.readyState === 1 && ws.bufferedAmount < 64 * 1024 && !ws._needsKeyframe) {
         try { ws.send(audioFrame, { binary: true }); } catch (_) {}
       }
     }
@@ -750,10 +748,24 @@ class ScrcpyEngine extends EventEmitter {
   _broadcastVideo(payload, isKeyframe = false) {
     for (const ws of this.wsClients) {
       if (ws.readyState === 1) {
-        // Generous backpressure window (1MB) to prevent frame drop on transient network latency over Cloudflare
-        if (ws.bufferedAmount > 1024 * 1024 && !isKeyframe) {
-          continue;
+        // Real-time low-latency buffer ceiling (256KB ~150ms): prevents seconds-long lag over Cloudflare
+        if (ws.bufferedAmount > 256 * 1024) {
+          ws._needsKeyframe = true;
         }
+
+        // If client fell behind, drop delta frames until next keyframe so decoder never corrupts
+        if (ws._needsKeyframe) {
+          if (!isKeyframe) {
+            continue;
+          }
+          // Keyframe arrived and buffer has drained to real-time level
+          if (ws.bufferedAmount < 64 * 1024) {
+            ws._needsKeyframe = false;
+          } else {
+            continue;
+          }
+        }
+
         try { ws.send(payload, { binary: true }); } catch (_) { this.wsClients.delete(ws); }
       } else {
         this.wsClients.delete(ws);

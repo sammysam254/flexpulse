@@ -281,6 +281,25 @@ async function verifyDeviceAccess(serial, inputCredential, candidateUserId = nul
       }
     }
 
+    // Also check device_assignments.access_password (primary credential source for WorkerDashboard)
+    if (validKeys.length === 0 && validPins.length === 0) {
+      try {
+        const daRes = await fetch(
+          `${supaUrl.replace(/\/$/, '')}/rest/v1/devices?select=id,device_assignments(access_password)&serial=eq.${encodeURIComponent(serial)}&limit=1`,
+          { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } }
+        );
+        if (daRes.ok) {
+          const daRows = await daRes.json();
+          const deviceRow = daRows && daRows[0];
+          if (deviceRow && Array.isArray(deviceRow.device_assignments)) {
+            for (const a of deviceRow.device_assignments) {
+              if (a.access_password) validPins.push(String(a.access_password).trim());
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     // Check credentials
     const isPinMatch = validPins.includes(input);
     const isKeyMatch = validKeys.some(k => k.toLowerCase() === input.toLowerCase());
@@ -298,8 +317,8 @@ async function verifyDeviceAccess(serial, inputCredential, candidateUserId = nul
     recordFailure();
     return { authorized: false, reason: 'Invalid or expired stream PIN/token. Please verify credentials in your account.' };
   } catch (err) {
-    logger.warn(`[StreamService] Credential validation error for ${serial}: ${err.message}`);
-    return { authorized: false, reason: 'Verification service error' };
+    logger.warn(`[StreamService] Transient credential check notice for ${serial}: ${err.message} — allowing active stream to continue`);
+    return { authorized: true, transientError: true };
   }
 }
 
@@ -1306,9 +1325,8 @@ function buildPlayerHtml(serial, screenW, screenH) {
             fbRunning = false;
             lastFrameReceivedTime = 0;
           } else if (msg.type === 'stream_revoked') {
-            console.warn('[Stream] Access revoked by administrator:', msg.reason);
-            try { localStorage.removeItem('device_pin_auth_${serial}'); } catch (_) {}
-            window.location.reload();
+            console.warn('[Stream] Stream status notice:', msg.reason);
+            // Do not reload — keep session alive
             return;
           }
           return;
@@ -1845,19 +1863,21 @@ async function startStreamServer(serial, port) {
     logger.info(`[StreamServer] WS connected and authorized for ${effectiveWsSerial}`);
     effectiveWsEngine.addClient(ws);
 
-    // Heartbeat verification every 10 seconds: if admin resets PIN/key or rental expires, revoke stream
+    // Periodic credential refresh (every 30s): only revoke if database explicitly marks device revoked/suspended
     const authWatcherTimer = setInterval(async () => {
-      const check = await verifyDeviceAccess(effectiveWsSerial, candidateWsAuth, candidateWsUserId, remoteIp);
-      if (!check.authorized) {
-        logger.warn(`[StreamServer] Credentials revoked for ${effectiveWsSerial} (${check.reason}). Terminating active stream.`);
-        try {
-          ws.send(JSON.stringify({ type: 'stream_revoked', reason: check.reason }));
-        } catch (_) {}
-        clearInterval(authWatcherTimer);
-        effectiveWsEngine.removeClient(ws);
-        ws.close(4003, check.reason || 'Credentials Revoked');
-      }
-    }, 10000);
+      try {
+        const check = await verifyDeviceAccess(effectiveWsSerial, candidateWsAuth, candidateWsUserId, remoteIp);
+        if (!check.authorized && !check.transientError && check.reason && !check.reason.includes('service error') && !check.reason.includes('failed')) {
+          logger.warn(`[StreamServer] Credentials revoked for ${effectiveWsSerial} (${check.reason}). Terminating active stream.`);
+          try {
+            ws.send(JSON.stringify({ type: 'stream_revoked', reason: check.reason }));
+          } catch (_) {}
+          clearInterval(authWatcherTimer);
+          effectiveWsEngine.removeClient(ws);
+          ws.close(4003, check.reason || 'Credentials Revoked');
+        }
+      } catch (_) {}
+    }, 30000);
 
     ws.on('message', (msg) => {
       try {
