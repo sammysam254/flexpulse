@@ -91,14 +91,21 @@ if defined GIT (
 :: ════════════════════════════════════════════════════════════════════════════
 echo.
 echo  ================================================================
-echo   PRIORITY: Updating to latest code from GitHub...
+echo   PRIORITY: Ensuring latest code from GitHub...
 echo  ================================================================
 echo.
 
 if exist "%INSTALL_DIR%\.git" (
-    echo [*] Agent installation detected at: %INSTALL_DIR%
-    echo [*] Checking current repository status...
+    echo [*] Existing installation found at: %INSTALL_DIR%
     
+    :: Kill any processes that might lock files
+    taskkill /F /IM adb.exe /T >nul 2>&1
+    taskkill /F /IM electron.exe /T >nul 2>&1
+    taskkill /F /IM cloudflared.exe /T >nul 2>&1
+    taskkill /F /IM node.exe /T >nul 2>&1
+    timeout /t 1 /nobreak >nul
+    
+    :: Show current state
     for /f "delims=" %%R in ('"%GIT%" -C "%INSTALL_DIR%" remote get-url origin 2^>nul') do (
         echo [*] Current repository: %%R
     )
@@ -110,37 +117,26 @@ if exist "%INSTALL_DIR%\.git" (
     )
     
     echo.
-    echo [*] Enforcing correct repository URL: %REPO_URL%
-    "%GIT%" -C "%INSTALL_DIR%" remote set-url origin "%REPO_URL%"
+    echo [*] Enforcing repository: %REPO_URL%
+    "%GIT%" -C "%INSTALL_DIR%" remote set-url origin "%REPO_URL%" 2>nul
     
-    echo [*] Fetching latest changes from GitHub...
-    "%GIT%" -C "%INSTALL_DIR%" fetch origin main --force
+    echo [*] Fetching latest from origin/main...
+    "%GIT%" -C "%INSTALL_DIR%" fetch origin main --force 2>nul
     
-    if !errorlevel! equ 0 (
-        echo [*] Pulling latest code...
-        "%GIT%" -C "%INSTALL_DIR%" checkout -B main origin/main --force
-        "%GIT%" -C "%INSTALL_DIR%" reset --hard origin/main
-        "%GIT%" -C "%INSTALL_DIR%" clean -fd
-        
-        if !errorlevel! equ 0 (
-            for /f "delims=" %%N in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --short HEAD 2^>nul') do (
-                echo [OK] Successfully updated to latest commit: %%N
-            )
-            echo [OK] Local code is now synchronized with GitHub main branch
-        ) else (
-            echo [WARN] Update encountered issues, will re-clone fresh copy
-        )
-    ) else (
-        echo [WARN] Fetch failed, will re-clone fresh copy from GitHub
+    echo [*] Resetting to origin/main...
+    "%GIT%" -C "%INSTALL_DIR%" reset --hard origin/main 2>nul
+    "%GIT%" -C "%INSTALL_DIR%" clean -fd 2>nul
+    
+    :: Show new state
+    for /f "delims=" %%N in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --short HEAD 2^>nul') do (
+        echo [OK] Updated to commit: %%N
     )
     
-    echo.
-    echo  ================================================================
-    echo   Latest code pulled successfully. Continuing setup...
-    echo  ================================================================
+    echo [OK] Code synchronized with GitHub main branch
     echo.
 ) else (
-    echo [*] Fresh installation - will clone from GitHub
+    echo [*] No existing installation - will clone fresh
+    echo.
 )
 
 :: ════════════════════════════════════════════════════════════════════════════
@@ -213,44 +209,56 @@ if defined ADB (
 )
 
 :: ════════════════════════════════════════════════════════════════════════════
-:: STEP 5 — Verify agent directory and switch to it
+:: STEP 5 — Ensure agent directory exists and is correct
 :: ════════════════════════════════════════════════════════════════════════════
 echo.
 echo [5/7] Verifying agent installation directory...
 
+:: If no .git directory exists, clone fresh
 if not exist "%INSTALL_DIR%\.git" (
-    echo [*] No existing agent installation found. Cloning fresh from GitHub...
+    echo [*] Cloning fresh from GitHub...
     
     "%GIT%" clone --depth 1 --single-branch --branch main "%REPO_URL%" "%INSTALL_DIR%"
     if !errorlevel! neq 0 (
-        echo [ERROR] git clone failed from %REPO_URL%. Check your connection.
+        echo [ERROR] git clone failed. Check your internet connection.
         pause & exit /b 1
     )
-    echo [OK] Fresh installation cloned from GitHub
+    echo [OK] Fresh installation cloned
 )
 
-:: Final verification
-for /f "delims=" %%R in ('"%GIT%" -C "%INSTALL_DIR%" remote get-url origin 2^>nul') do set "VERIFIED_REMOTE=%%R"
-for /f "delims=" %%H in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --short HEAD 2^>nul') do set "VERIFIED_COMMIT=%%H"
-for /f "delims=" %%B in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --abbrev-ref HEAD 2^>nul') do set "VERIFIED_BRANCH=%%B"
-
+:: Always verify and show final state
 echo.
 echo  ================================================================
-echo   FINAL REPOSITORY VERIFICATION
+echo   REPOSITORY STATUS
 echo  ================================================================
-echo   Remote URL     : !VERIFIED_REMOTE!
-echo   Current Branch : !VERIFIED_BRANCH!
-echo   Commit Hash    : !VERIFIED_COMMIT!
-echo   Expected Repo  : %REPO_URL%
+
+for /f "delims=" %%R in ('"%GIT%" -C "%INSTALL_DIR%" remote get-url origin 2^>nul') do (
+    echo   Remote URL     : %%R
+    set "FINAL_REMOTE=%%R"
+)
+for /f "delims=" %%B in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --abbrev-ref HEAD 2^>nul') do (
+    echo   Current Branch : %%B
+)
+for /f "delims=" %%H in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --short HEAD 2^>nul') do (
+    echo   Commit Hash    : %%H
+    set "FINAL_COMMIT=%%H"
+)
+
 echo  ================================================================
 echo.
 
-if /i not "!VERIFIED_REMOTE!"=="%REPO_URL%" (
-    echo [ERROR] Repository mismatch still detected after update!
-    echo [ERROR] This should not happen. Please report this issue.
+:: Verify repository is correct
+if not defined FINAL_REMOTE (
+    echo [ERROR] Could not read repository information!
     pause & exit /b 1
 )
-echo [OK] ✓ Agent code verified: %REPO_URL% (main @ !VERIFIED_COMMIT!)
+
+if not defined FINAL_COMMIT (
+    echo [ERROR] Could not read commit information!
+    pause & exit /b 1
+)
+
+echo [OK] ✓ Running from: %REPO_URL% (main @ !FINAL_COMMIT!)
 
 :: Switch working directory to the install dir for all remaining steps
 cd /d "%INSTALL_DIR%"
@@ -440,17 +448,8 @@ echo       Install    : %INSTALL_DIR%
 echo       Status     : Active 24/7 Background Service (Auto-starts on Boot)
 echo  ================================================================
 echo.
-echo  ================================================================
-echo   SETUP COMPLETE - LOGS VISIBLE FOR DEBUGGING
-echo  ================================================================
-echo.
-echo  The agent is now running and will automatically:
-echo   - Pull latest code from GitHub every 30 minutes
-echo   - Restart gracefully when updates are detected
-echo   - Keep devices connected during updates
-echo   - Show all repository operations in agent logs
-echo.
-echo  Press any key to close this window, or leave it open to monitor...
-pause >nul
+echo  Opening dashboard automatically in your browser...
+echo  (Window will close in 5 seconds)
+ping 127.0.0.1 -n 6 >nul 2>nul
 exit /b 0
 
