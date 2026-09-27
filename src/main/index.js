@@ -294,6 +294,13 @@ app.whenReady().then(async () => {
   try {
     const { url } = await startDashboardServer(7400);
     logger.info(`[Dashboard] DeviceFarm Agent Dashboard live at ${url}`);
+
+    // Immediately connect 24/7 Cloudflare Zero Trust tunnel for agent.dennoh.site
+    try {
+      const { createTunnel } = require('../services/tunnel-service');
+      createTunnel(7400).catch(tErr => logger.warn(`Tunnel setup notice: ${tErr.message}`));
+    } catch (_) {}
+
     const isHidden = process.argv.includes('--hidden') || process.env.BACKGROUND_SERVICE === '1';
     if (!isHidden) {
       openInChrome(url);
