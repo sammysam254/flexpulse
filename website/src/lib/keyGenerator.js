@@ -24,12 +24,13 @@ export function generate6DigitPin() {
 
 export const DEFAULT_STREAM_DOMAIN = import.meta.env.VITE_STREAM_DOMAIN || 'https://agent.dennoh.site';
 
-// Normalizes any device stream URL to ensure it always routes to agent.dennoh.site (with admin bypass support)
-export function normalizeStreamUrl(url, serial, isAdmin = false) {
+// Normalizes any device stream URL to ensure it always routes to agent.dennoh.site (with admin bypass & user assignment support)
+export function normalizeStreamUrl(url, serial, isAdmin = false, userId = null) {
   const baseDomain = (DEFAULT_STREAM_DOMAIN || 'https://agent.dennoh.site').replace(/\/+$/, '');
+  const adminParam = isAdmin ? '&admin=true&role=seed_admin' : '';
+  const userParam = userId ? `&user_id=${encodeURIComponent(userId)}` : '';
   if (!url) {
-    const adminParam = isAdmin ? '&admin=true&role=seed_admin' : '';
-    return serial ? `${baseDomain}/?udid=${encodeURIComponent(serial)}${adminParam}` : baseDomain;
+    return serial ? `${baseDomain}/?udid=${encodeURIComponent(serial)}${adminParam}${userParam}` : baseDomain;
   }
   try {
     const raw = url.startsWith('http') ? url : `https://${url}`;
@@ -48,10 +49,12 @@ export function normalizeStreamUrl(url, serial, isAdmin = false) {
       u.searchParams.set('admin', 'true');
       u.searchParams.set('role', 'seed_admin');
     }
+    if (userId && !u.searchParams.get('user_id')) {
+      u.searchParams.set('user_id', userId);
+    }
     return u.toString();
   } catch (_) {
-    const adminParam = isAdmin ? '&admin=true&role=seed_admin' : '';
-    return serial ? `${baseDomain}/?udid=${encodeURIComponent(serial)}${adminParam}` : baseDomain;
+    return serial ? `${baseDomain}/?udid=${encodeURIComponent(serial)}${adminParam}${userParam}` : baseDomain;
   }
 }
 

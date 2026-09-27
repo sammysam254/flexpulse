@@ -74,15 +74,19 @@ export default function WorkerDashboard() {
     setError(null);
 
     if (inputPassword.trim() === unlockModal.access_password.trim()) {
-      let streamUrl = normalizeStreamUrl(unlockModal.devices?.stream_url, unlockModal.devices?.serial);
+      let streamUrl = normalizeStreamUrl(unlockModal.devices?.stream_url, unlockModal.devices?.serial, false, profile?.id);
       if (streamUrl) {
         try {
           const u = new URL(streamUrl);
           u.searchParams.set('pin', unlockModal.access_password.trim());
+          if (profile?.id) u.searchParams.set('user_id', profile.id);
+          if (profile?.role) u.searchParams.set('role', profile.role);
           streamUrl = u.toString();
         } catch (_) {
           streamUrl = streamUrl.replace(/([?&])pin=[^&]*/g, '$1');
           streamUrl += (streamUrl.includes('?') ? '&' : '?') + 'pin=' + encodeURIComponent(unlockModal.access_password.trim());
+          if (profile?.id) streamUrl += '&user_id=' + encodeURIComponent(profile.id);
+          if (profile?.role) streamUrl += '&role=' + encodeURIComponent(profile.role);
         }
         const w = 510, h = 900;
         const left = Math.max(0, Math.round((window.screen.width - w) / 2));

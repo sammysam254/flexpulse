@@ -184,14 +184,15 @@ const BRUTE_FORCE_LOCKS = new Map(); // key: ip_serial -> { attempts, lockedUnti
 async function verifyDeviceAccess(serial, inputCredential, candidateUserId = null, clientIp = 'unknown', candidateRole = null, isAdmin = false) {
   if (!serial) return { authorized: false, reason: 'Device UDID is required' };
 
-  // 1. Admin Master Bypass: Administrators can view and control all devices without needing a PIN
-  if (isAdmin || candidateRole === 'admin' || candidateRole === 'seed_admin' || candidateRole === 'super_admin' || inputCredential === 'admin' || inputCredential === 'seed_admin') {
-    logger.info(`[StreamService] Admin access granted for device ${serial} (no PIN required)`);
+  // 1. Admin Master Bypass: Administrators (admin, seed_admin, super_admin) can view and control all devices without needing a PIN
+  if (isAdmin || ['admin', 'seed_admin', 'super_admin'].includes(candidateRole) || ['admin', 'seed_admin', 'super_admin'].includes(inputCredential)) {
     return { authorized: true, isAdmin: true };
   }
 
   const input = (inputCredential || '').trim();
-  if (!input) return { authorized: false, reason: 'Credential (PIN or token) required' };
+  if (!input) {
+    return { authorized: false, reason: 'Credential (PIN or access token) required. Please unlock from your account dashboard.' };
+  }
 
   const lockKey = `${clientIp}_${serial}`;
   const now = Date.now();
@@ -212,120 +213,153 @@ async function verifyDeviceAccess(serial, inputCredential, candidateUserId = nul
 
   // Check if currently locked out due to previous bad guesses
   const lock = BRUTE_FORCE_LOCKS.get(lockKey);
-  const isCurrentlyLocked = (lock && lock.lockedUntil && lock.lockedUntil > now);
-
-  // 2. Query Supabase for latest device status and active rental
-  const cfg = loadConfig();
-  const supaUrl = cfg.supabaseUrl;
-  const supaKey = cfg.supabaseServiceRoleKey || cfg.supabaseAnonKey;
-  if (!supaUrl || !supaKey) return { authorized: false, reason: 'Backend service configuration missing' };
-
-  try {
-    // 2a. Fetch device record
-    const devRes = await fetch(`${supaUrl.replace(/\/$/, '')}/rest/v1/devices?serial=eq.${encodeURIComponent(serial)}&select=id,status,stream_url`, {
-      headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` }
-    });
-    if (!devRes.ok) { recordFailure(); return { authorized: false, reason: 'Device lookup failed' }; }
-    const devices = await devRes.json();
-    if (!Array.isArray(devices) || devices.length === 0) {
-      recordFailure();
-      return { authorized: false, reason: 'Device not recognized on this server' };
-    }
-
-    const dev = devices[0];
-    const devStatus = dev.status || 'online';
-    if (devStatus === 'suspended' || devStatus === 'blocked' || devStatus === 'revoked') {
-      return { authorized: false, reason: `Device stream is currently ${devStatus} by administrator.` };
-    }
-
-    const validKeys = [];
-    const validPins = [];
-
-    // Parse credentials from devices.stream_url
-    const currentStreamUrl = dev.stream_url || '';
-    const matchKey   = currentStreamUrl.match(/[?&]key=([^&]+)/i);
-    const matchPin   = currentStreamUrl.match(/[?&]pin=([^&]+)/i);
-    const matchToken = currentStreamUrl.match(/[?&]token=([^&]+)/i);
-    if (matchKey)   validKeys.push(decodeURIComponent(matchKey[1]).trim());
-    if (matchPin)   validPins.push(decodeURIComponent(matchPin[1]).trim());
-    if (matchToken) validKeys.push(decodeURIComponent(matchToken[1]).trim());
-
-    // 2b. Check active rentals: verify user ownership and rental status
-    const rRes = await fetch(`${supaUrl.replace(/\/$/, '')}/rest/v1/device_rentals?serial_number=eq.${encodeURIComponent(serial)}&select=id,user_id,status,stream_url,expires_at`, {
-      headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` }
-    });
-
-    if (rRes.ok) {
-      const rentals = await rRes.json();
-      if (Array.isArray(rentals) && rentals.length > 0) {
-        for (const r of rentals) {
-          const isExpired = r.expires_at && new Date(r.expires_at) < new Date();
-          if (r.status !== 'active' && r.status !== 'paid') {
-            continue;
-          }
-          if (isExpired) {
-            continue;
-          }
-
-          // If a candidateUserId is provided: check account ownership
-          if (candidateUserId) {
-            const isOwner = (r.user_id === candidateUserId || r.user_id === 'RENTAL_USER_DEFAULT');
-            if (!isOwner) {
-              logger.warn(`[StreamService] Account mismatch: requesting user ${candidateUserId} != rental owner ${r.user_id}`);
-              recordFailure();
-              return { authorized: false, reason: 'This device is assigned to another user account.' };
-            }
-          }
-
-          const rUrl = r.stream_url || '';
-          const rKey   = rUrl.match(/[?&]key=([^&]+)/i);
-          const rPin   = rUrl.match(/[?&]pin=([^&]+)/i);
-          const rToken = rUrl.match(/[?&]token=([^&]+)/i);
-          if (rKey)   validKeys.push(decodeURIComponent(rKey[1]).trim());
-          if (rPin)   validPins.push(decodeURIComponent(rPin[1]).trim());
-          if (rToken) validKeys.push(decodeURIComponent(rToken[1]).trim());
-        }
-      }
-    }
-
-    // Always check device_assignments.access_password (primary credential source for WorkerDashboard)
-    try {
-      const daRes = await fetch(
-        `${supaUrl.replace(/\/$/, '')}/rest/v1/devices?select=id,device_assignments(access_password)&serial=eq.${encodeURIComponent(serial)}&limit=1`,
-        { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } }
-      );
-      if (daRes.ok) {
-        const daRows = await daRes.json();
-        const deviceRow = daRows && daRows[0];
-        if (deviceRow && Array.isArray(deviceRow.device_assignments)) {
-          for (const a of deviceRow.device_assignments) {
-            if (a.access_password) validPins.push(String(a.access_password).trim());
-          }
-        }
-      }
-    } catch (_) {}
-
-    // Check credentials
-    const isPinMatch = validPins.includes(input);
-    const isKeyMatch = validKeys.some(k => k.toLowerCase() === input.toLowerCase());
-    const isBindingMatch = dev.binding_code && (input === String(dev.binding_code).trim() || input === String(dev.binding_code).slice(-4));
-
-    if (isPinMatch || isKeyMatch || isBindingMatch) {
-      recordSuccess();
-      return { authorized: true };
-    }
-
-    if (isCurrentlyLocked) {
-      const waitSec = Math.ceil((lock.lockedUntil - now) / 1000);
-      return { authorized: false, reason: `Too many failed attempts. Device temporarily locked for ${waitSec}s.` };
-    }
-
-    recordFailure();
-    return { authorized: false, reason: 'Invalid or expired stream PIN/token. Please verify credentials in your account.' };
-  } catch (err) {
-    logger.warn(`[StreamService] Transient credential check notice for ${serial}: ${err.message} — allowing active stream to continue`);
-    return { authorized: true, transientError: true };
+  if (lock && lock.lockedUntil && lock.lockedUntil > now) {
+    const waitSec = Math.ceil((lock.lockedUntil - now) / 1000);
+    return { authorized: false, reason: `Too many failed attempts. Device temporarily locked for ${waitSec}s.` };
   }
+
+  // 2. High-speed multi-tier cache lookup (Redis / Memory) — 0 Supabase egress on repeat checks!
+  const cacheKey = `dev_auth:${serial}`;
+  let devRecord = null;
+  try {
+    devRecord = await cache.get(cacheKey);
+  } catch (_) {}
+
+  if (!devRecord) {
+    const cfg = loadConfig();
+    const supaUrl = cfg.supabaseUrl;
+    const supaKey = cfg.supabaseServiceRoleKey || cfg.supabaseAnonKey;
+    if (!supaUrl || !supaKey) {
+      return { authorized: false, reason: 'Backend service configuration missing' };
+    }
+
+    try {
+      // 1 single query fetching device record + device_assignments
+      const fetchUrl = `${supaUrl.replace(/\/$/, '')}/rest/v1/devices?select=id,status,stream_url,binding_code,device_assignments(id,assigned_to_user_id,access_password)&serial=eq.${encodeURIComponent(serial)}&limit=1`;
+      const devRes = await fetch(fetchUrl, {
+        headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` }
+      });
+      if (!devRes.ok) {
+        recordFailure();
+        return { authorized: false, reason: 'Device authorization lookup failed' };
+      }
+      const rows = await devRes.json();
+      if (!Array.isArray(rows) || rows.length === 0) {
+        recordFailure();
+        return { authorized: false, reason: 'Device not recognized on this server' };
+      }
+      devRecord = rows[0];
+
+      // Also fetch rentals in parallel ONLY if present
+      try {
+        const rRes = await fetch(
+          `${supaUrl.replace(/\/$/, '')}/rest/v1/device_rentals?serial_number=${encodeURIComponent(serial)}&status=in.(active,paid)&select=id,user_id,stream_url,expires_at`,
+          { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } }
+        );
+        if (rRes.ok) {
+          devRecord.rentals = await rRes.json();
+        }
+      } catch (_) {}
+
+      // Cache for 20 seconds: fast propagation of unallocation/revocation with near-zero Supabase egress!
+      try {
+        await cache.set(cacheKey, devRecord, 20);
+      } catch (_) {}
+    } catch (err) {
+      logger.warn(`[StreamService] Supabase fetch error for ${serial}: ${err.message}`);
+      return { authorized: false, reason: 'Database connection error' };
+    }
+  }
+
+  // 3. Verify Device Status
+  const devStatus = devRecord.status || 'online';
+  if (devStatus === 'suspended' || devStatus === 'blocked' || devStatus === 'revoked') {
+    return { authorized: false, reason: `Device stream is currently ${devStatus} by administrator.` };
+  }
+
+  // 4. Verify Active Allocations / Assignments
+  const assignments = Array.isArray(devRecord.device_assignments) ? devRecord.device_assignments : [];
+  const rentals = Array.isArray(devRecord.rentals) ? devRecord.rentals : [];
+
+  // Check if device is completely UNALLOCATED
+  if (assignments.length === 0 && rentals.length === 0) {
+    const currentStreamUrl = devRecord.stream_url || '';
+    const matchPin = currentStreamUrl.match(/[?&]pin=([^&]+)/i);
+    const fallbackPin = matchPin ? decodeURIComponent(matchPin[1]).trim() : null;
+    const isBindingMatch = devRecord.binding_code && (input === String(devRecord.binding_code).trim() || input === String(devRecord.binding_code).slice(-4));
+
+    if (!fallbackPin || (fallbackPin !== input && !isBindingMatch)) {
+      recordFailure();
+      return {
+        authorized: false,
+        reason: 'This device is currently unallocated. Please contact an administrator or access from your account.'
+      };
+    }
+  }
+
+  // Check matching credential against assignments
+  let matchingAssignment = null;
+  if (assignments.length > 0) {
+    matchingAssignment = assignments.find(a => a.access_password && String(a.access_password).trim() === input);
+  }
+
+  // Check matching credential against rentals
+  let matchingRental = null;
+  if (rentals.length > 0) {
+    matchingRental = rentals.find(r => {
+      const isExpired = r.expires_at && new Date(r.expires_at) < new Date();
+      if (isExpired) return false;
+      const rUrl = r.stream_url || '';
+      const rPin = rUrl.match(/[?&]pin=([^&]+)/i);
+      const rKey = rUrl.match(/[?&]key=([^&]+)/i);
+      const rToken = rUrl.match(/[?&]token=([^&]+)/i);
+      return (
+        (rPin && decodeURIComponent(rPin[1]).trim() === input) ||
+        (rKey && decodeURIComponent(rKey[1]).trim() === input) ||
+        (rToken && decodeURIComponent(rToken[1]).trim() === input)
+      );
+    });
+  }
+
+  // Check fallback stream_url on devices table
+  let isFallbackMatch = false;
+  const currentStreamUrl = devRecord.stream_url || '';
+  const matchPin = currentStreamUrl.match(/[?&]pin=([^&]+)/i);
+  const matchKey = currentStreamUrl.match(/[?&]key=([^&]+)/i);
+  if (matchPin && decodeURIComponent(matchPin[1]).trim() === input) isFallbackMatch = true;
+  if (matchKey && decodeURIComponent(matchKey[1]).trim().toLowerCase() === input.toLowerCase()) isFallbackMatch = true;
+  const isBindingMatch = devRecord.binding_code && (input === String(devRecord.binding_code).trim() || input === String(devRecord.binding_code).slice(-4));
+
+  if (!matchingAssignment && !matchingRental && !isFallbackMatch && !isBindingMatch) {
+    recordFailure();
+    return {
+      authorized: false,
+      reason: 'Invalid or expired stream PIN/token. Please verify credentials in your account dashboard.'
+    };
+  }
+
+  // 5. User Ownership Confirmation:
+  // If candidateUserId is provided, verify it matches the assigned user!
+  const assignedUserId = matchingAssignment
+    ? matchingAssignment.assigned_to_user_id
+    : (matchingRental ? matchingRental.user_id : null);
+
+  if (candidateUserId && assignedUserId && assignedUserId !== 'RENTAL_USER_DEFAULT') {
+    if (candidateUserId !== assignedUserId) {
+      logger.warn(`[StreamService] Security violation: requesting user ${candidateUserId} != assigned user ${assignedUserId} for ${serial}`);
+      recordFailure();
+      return {
+        authorized: false,
+        reason: 'Access Denied: This device is allocated to another user account.'
+      };
+    }
+  }
+
+  recordSuccess();
+  return {
+    authorized: true,
+    assignedUserId: assignedUserId || candidateUserId || null,
+  };
 }
 
 // ─── 5 Auto-Sliding Cards Presentation (Vertex Digital) ─────────────────────
@@ -839,7 +873,13 @@ function buildVertexCardsHtml(serial, attemptedCredential, isRevokedOrInvalid, c
       const udid = document.getElementById('udidField').value.trim();
       const pin = document.getElementById('pinField').value.trim();
       if (!udid || !pin) return;
-      window.location.href = '/?udid=' + encodeURIComponent(udid) + '&pin=' + encodeURIComponent(pin);
+      const urlParams = new URLSearchParams(window.location.search);
+      const userId = urlParams.get('user_id') || urlParams.get('uid') || '';
+      const role = urlParams.get('role') || '';
+      let targetUrl = '/?udid=' + encodeURIComponent(udid) + '&pin=' + encodeURIComponent(pin);
+      if (userId) targetUrl += '&user_id=' + encodeURIComponent(userId);
+      if (role) targetUrl += '&role=' + encodeURIComponent(role);
+      window.location.href = targetUrl;
     }
   </script>
 </body>
@@ -1339,6 +1379,18 @@ function buildPlayerHtml(serial, screenW, screenH) {
         } catch (_) {}
       }
 
+      if (typeof e.data === 'string') {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'stream_revoked') {
+            console.warn('[Stream] Access revoked or unallocated:', msg.reason);
+            window.location.href = '/?udid=' + encodeURIComponent('${serial}') + '&revoked=1';
+            return;
+          }
+        } catch (_) {}
+        return;
+      }
+
       if (!(e.data instanceof ArrayBuffer)) return;
       lastFrameReceivedTime = Date.now();
       if (fbRunning) { fbRunning = false; modeText.textContent = 'LIVE 60FPS'; }
@@ -1417,8 +1469,13 @@ function buildPlayerHtml(serial, screenW, screenH) {
 
     ws.onerror = function() {};
 
-    ws.onclose = function() {
+    ws.onclose = function(e) {
       wsOk = false;
+      if (e.code === 4003 || e.code === 4001 || e.code === 4004) {
+        // Access revoked or unallocated -> immediately return to slides
+        window.location.href = '/?udid=' + encodeURIComponent('${serial}') + '&revoked=1';
+        return;
+      }
       wsFailCount++;
       if (wsFailCount >= 15 && !fbRunning) startFallback();
       const delay = wsFailCount < 5 ? 500 : 1000;
@@ -1900,15 +1957,17 @@ async function startStreamServer(serial, port) {
       return;
     }
 
-    logger.info(`[StreamServer] WS connected and authorized for ${effectiveWsSerial} (admin=${isWsAdmin})`);
+    const boundUserId = wsAuthResult.assignedUserId || candidateWsUserId || null;
+    logger.info(`[StreamServer] WS connected and authorized for ${effectiveWsSerial} (user=${boundUserId || 'admin'}, admin=${isWsAdmin})`);
     effectiveWsEngine.addClient(ws);
 
-    // Periodic credential refresh (every 30s): admins are never revoked
+    // Periodic credential refresh (every 20s): admins are never revoked
+    // Immediately terminates stream and kicks to slides if unallocated or re-assigned
     const authWatcherTimer = isWsAdmin ? null : setInterval(async () => {
       try {
-        const check = await verifyDeviceAccess(effectiveWsSerial, candidateWsAuth, candidateWsUserId, remoteIp, candidateWsRole, isWsAdmin);
+        const check = await verifyDeviceAccess(effectiveWsSerial, candidateWsAuth, boundUserId, remoteIp, candidateWsRole, isWsAdmin);
         if (!check.authorized && !check.transientError && check.reason && !check.reason.includes('service error') && !check.reason.includes('failed')) {
-          logger.warn(`[StreamServer] Credentials revoked for ${effectiveWsSerial} (${check.reason}). Terminating active stream.`);
+          logger.warn(`[StreamServer] Access revoked for ${effectiveWsSerial} (${check.reason}). Terminating active stream.`);
           try {
             ws.send(JSON.stringify({ type: 'stream_revoked', reason: check.reason }));
           } catch (_) {}
@@ -1917,7 +1976,7 @@ async function startStreamServer(serial, port) {
           ws.close(4003, check.reason || 'Credentials Revoked');
         }
       } catch (_) {}
-    }, 30000);
+    }, 20000);
 
     ws.on('message', (msg) => {
       try {
@@ -1976,4 +2035,4 @@ function killStreamServer(streamProcess) {
   }
 }
 
-module.exports = { startStreamServer, buildStreamUrl, killStreamServer };
+module.exports = { startStreamServer, buildStreamUrl, killStreamServer, verifyDeviceAccess };
