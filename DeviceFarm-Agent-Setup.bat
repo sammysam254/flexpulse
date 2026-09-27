@@ -87,10 +87,67 @@ if defined GIT (
 )
 
 :: ════════════════════════════════════════════════════════════════════════════
+:: STEP 1.5 — IMMEDIATE UPDATE: Pull latest code from GitHub FIRST
+:: ════════════════════════════════════════════════════════════════════════════
+echo.
+echo  ================================================================
+echo   PRIORITY: Updating to latest code from GitHub...
+echo  ================================================================
+echo.
+
+if exist "%INSTALL_DIR%\.git" (
+    echo [*] Agent installation detected at: %INSTALL_DIR%
+    echo [*] Checking current repository status...
+    
+    for /f "delims=" %%R in ('"%GIT%" -C "%INSTALL_DIR%" remote get-url origin 2^>nul') do (
+        echo [*] Current repository: %%R
+    )
+    for /f "delims=" %%B in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --abbrev-ref HEAD 2^>nul') do (
+        echo [*] Current branch: %%B
+    )
+    for /f "delims=" %%C in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --short HEAD 2^>nul') do (
+        echo [*] Current commit: %%C
+    )
+    
+    echo.
+    echo [*] Enforcing correct repository URL: %REPO_URL%
+    "%GIT%" -C "%INSTALL_DIR%" remote set-url origin "%REPO_URL%"
+    
+    echo [*] Fetching latest changes from GitHub...
+    "%GIT%" -C "%INSTALL_DIR%" fetch origin main --force
+    
+    if !errorlevel! equ 0 (
+        echo [*] Pulling latest code...
+        "%GIT%" -C "%INSTALL_DIR%" checkout -B main origin/main --force
+        "%GIT%" -C "%INSTALL_DIR%" reset --hard origin/main
+        "%GIT%" -C "%INSTALL_DIR%" clean -fd
+        
+        if !errorlevel! equ 0 (
+            for /f "delims=" %%N in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --short HEAD 2^>nul') do (
+                echo [OK] Successfully updated to latest commit: %%N
+            )
+            echo [OK] Local code is now synchronized with GitHub main branch
+        ) else (
+            echo [WARN] Update encountered issues, will re-clone fresh copy
+        )
+    ) else (
+        echo [WARN] Fetch failed, will re-clone fresh copy from GitHub
+    )
+    
+    echo.
+    echo  ================================================================
+    echo   Latest code pulled successfully. Continuing setup...
+    echo  ================================================================
+    echo.
+) else (
+    echo [*] Fresh installation - will clone from GitHub
+)
+
+:: ════════════════════════════════════════════════════════════════════════════
 :: STEP 2 — Node.js
 :: ════════════════════════════════════════════════════════════════════════════
 echo.
-echo [2/6] Checking Node.js...
+echo [3/7] Checking Node.js...
 set "NODE="
 set "NPM="
 
@@ -130,7 +187,7 @@ echo [OK] npm  : %NPM%
 :: STEP 3 — ADB platform-tools
 :: ════════════════════════════════════════════════════════════════════════════
 echo.
-echo [3/6] Checking ADB...
+echo [4/7] Checking ADB...
 set "ADB="
 if exist "%INSTALL_DIR%\assets\bin\adb.exe"  set "ADB=%INSTALL_DIR%\assets\bin\adb.exe"
 if not defined ADB if exist "C:\platform-tools\adb.exe" set "ADB=C:\platform-tools\adb.exe"
@@ -159,7 +216,7 @@ if defined ADB (
 :: STEP 4 — Clone or update the agent repo
 :: ════════════════════════════════════════════════════════════════════════════
 echo.
-echo [4/6] Setting up agent files...
+echo [5/7] Setting up agent files...
 
 set "FORCE_RECLONE=0"
 if exist "%INSTALL_DIR%\.git" (
@@ -272,7 +329,7 @@ echo [OK] config.json updated.
 :: STEP 5 — npm install + Electron binary + scrcpy-server.jar
 :: ════════════════════════════════════════════════════════════════════════════
 echo.
-echo [5/6] Installing dependencies...
+echo [6/7] Installing dependencies...
 
 if exist "node_modules\winston\package.json" (
     echo [OK] npm dependencies already installed.
@@ -326,7 +383,7 @@ if not exist "node_modules\electron\dist\electron.exe" (
 :: ════════════════════════════════════════════════════════════════════════════
 echo.
 echo  ================================================================
-echo   STEP 6: Flexpulse AUTONOMOUS SYSTEM INITIALIZATION
+echo   STEP 7: Flexpulse AUTONOMOUS SYSTEM INITIALIZATION
 echo  ================================================================
 echo.
 echo [*] Identifying system and establishing autonomous cloud sync...
