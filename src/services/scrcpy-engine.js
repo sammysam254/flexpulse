@@ -32,6 +32,30 @@ function hasSpsNal(buf) {
   return false;
 }
 
+function inspectH264Payload(buf) {
+  let isKeyframe = false;
+  let isSps = false;
+  let isPps = false;
+  let isIdr = false;
+  if (!buf || buf.length < 4) return { isKeyframe, isSps, isPps, isIdr };
+
+  const len = Math.min(buf.length, 512);
+  for (let i = 0; i <= len - 4; i++) {
+    if (buf[i] === 0 && buf[i + 1] === 0) {
+      let ntype = -1;
+      if (buf[i + 2] === 1 && i + 3 < buf.length) {
+        ntype = buf[i + 3] & 0x1f;
+      } else if (buf[i + 2] === 0 && buf[i + 3] === 1 && i + 4 < buf.length) {
+        ntype = buf[i + 4] & 0x1f;
+      }
+      if (ntype === 7) { isSps = true; isKeyframe = true; }
+      else if (ntype === 8) { isPps = true; isKeyframe = true; }
+      else if (ntype === 5) { isIdr = true; isKeyframe = true; }
+    }
+  }
+  return { isKeyframe, isSps, isPps, isIdr };
+}
+
 /**
  * Extract the encoded frame dimensions directly from an H.264 SPS NAL unit.
  * This is the ground truth — the exact size the scrcpy encoder configured,
@@ -226,6 +250,7 @@ class ScrcpyEngine extends EventEmitter {
    * so the WebCodecs decoder is initialised before any new delta frame arrives.
    */
   addClient(ws) {
+    ws._needsKeyframe = false;
     this.wsClients.add(ws);
     // Send cached SPS/PPS config & IDR keyframe immediately so WebCodecs decodes instantly
     const initialPacket = this._keyframeBuffer || this._configPacket;
@@ -332,10 +357,10 @@ class ScrcpyEngine extends EventEmitter {
       'cleanup=false',
       'send_dummy_byte=true',
       'video_source=display',
-      'video_bit_rate=1200000',
-      'max_size=840',
+      'video_bit_rate=900000',
+      'max_size=800',
       'max_fps=30',
-      'video_codec_options=i-frame-interval=2',
+      'video_codec_options=i-frame-interval=1',
       'send_frame_meta=true',
       'show_touches=false',
       'stay_awake=true',
@@ -625,9 +650,9 @@ class ScrcpyEngine extends EventEmitter {
         const payload  = buf.subarray(META, META + pktSize);
         buf = buf.subarray(META + pktSize);
 
-        const nalType = payload.length > 4 ? (payload[4] & 0x1f) : -1;
-        const isSps = hasSpsNal(payload);
-        const isIdr = nalType === 5;
+        const info = inspectH264Payload(payload);
+        const isSps = info.isSps;
+        const isIdr = info.isIdr;
         const isConfig = isSps || (ptsHigh & 0x80000000) !== 0;
         const isKeyframe = isConfig || isIdr || isSps;
 
@@ -655,15 +680,16 @@ class ScrcpyEngine extends EventEmitter {
           }
         }
 
+        // Always ensure keyframes sent to clients include the SPS/PPS config so browser decoder never stalls
+        let outPayload = payload;
         if (isIdr) {
-          if (this._configPacket) {
-            this._keyframeBuffer = Buffer.concat([this._configPacket, payload]);
-          } else {
-            this._keyframeBuffer = Buffer.from(payload);
+          if (this._configPacket && !isSps) {
+            outPayload = Buffer.concat([this._configPacket, payload]);
           }
+          this._keyframeBuffer = outPayload;
         }
 
-        this._broadcastVideo(payload, isKeyframe);
+        this._broadcastVideo(outPayload, isKeyframe);
       }
 
       // Safety reset
@@ -748,22 +774,18 @@ class ScrcpyEngine extends EventEmitter {
   _broadcastVideo(payload, isKeyframe = false) {
     for (const ws of this.wsClients) {
       if (ws.readyState === 1) {
-        // Real-time low-latency buffer ceiling (256KB ~150ms): prevents seconds-long lag over Cloudflare
-        if (ws.bufferedAmount > 256 * 1024) {
+        // Real-time low-latency buffer ceiling (64KB ~0.5s): prevents latency queue from building up over Cloudflare
+        if (ws.bufferedAmount > 64 * 1024) {
           ws._needsKeyframe = true;
         }
 
-        // If client fell behind, drop delta frames until next keyframe so decoder never corrupts
+        // If client fell behind, drop delta frames to instantly drain buffer
         if (ws._needsKeyframe) {
           if (!isKeyframe) {
             continue;
           }
-          // Keyframe arrived and buffer has drained to real-time level
-          if (ws.bufferedAmount < 64 * 1024) {
-            ws._needsKeyframe = false;
-          } else {
-            continue;
-          }
+          // Keyframe (with SPS/PPS) arrived: deliver immediately and reset catch-up flag
+          ws._needsKeyframe = false;
         }
 
         try { ws.send(payload, { binary: true }); } catch (_) { this.wsClients.delete(ws); }

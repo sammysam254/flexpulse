@@ -187,7 +187,35 @@ async function handleDeviceAdd(device) {
       logger.warn(`Tunnel notice for ${serial} (using local endpoint): ${tErr.message}`);
     }
 
-    const streamUrl = buildStreamUrl(publicUrl, port, realSerial || serial);
+    // Fetch active assigned PIN from device_assignments or existing record
+    let assignedPin = null;
+    try {
+      const activeCfg = loadConfig();
+      const supaUrl = activeCfg.supabaseUrl;
+      const supaKey = activeCfg.supabaseServiceRoleKey || activeCfg.supabaseAnonKey;
+      if (supaUrl && supaKey) {
+        const daRes = await fetch(
+          `${supaUrl.replace(/\/$/, '')}/rest/v1/devices?select=id,stream_url,device_assignments(access_password)&serial=eq.${encodeURIComponent(realSerial || serial)}&limit=1`,
+          { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } }
+        );
+        if (daRes.ok) {
+          const rows = await daRes.json();
+          const r = rows && rows[0];
+          if (r) {
+            if (Array.isArray(r.device_assignments) && r.device_assignments.length > 0) {
+              const pass = r.device_assignments[r.device_assignments.length - 1].access_password;
+              if (pass) assignedPin = String(pass).trim();
+            }
+            if (!assignedPin && r.stream_url) {
+              const m = r.stream_url.match(/[?&]pin=([^&]+)/i);
+              if (m && m[1]) assignedPin = decodeURIComponent(m[1]).trim();
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    const streamUrl = buildStreamUrl(publicUrl, port, realSerial || serial, assignedPin);
 
     logger.info(`[OK] Stream URL for ${serial}: ${streamUrl}`);
 

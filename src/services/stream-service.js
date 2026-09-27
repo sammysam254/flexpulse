@@ -281,30 +281,29 @@ async function verifyDeviceAccess(serial, inputCredential, candidateUserId = nul
       }
     }
 
-    // Also check device_assignments.access_password (primary credential source for WorkerDashboard)
-    if (validKeys.length === 0 && validPins.length === 0) {
-      try {
-        const daRes = await fetch(
-          `${supaUrl.replace(/\/$/, '')}/rest/v1/devices?select=id,device_assignments(access_password)&serial=eq.${encodeURIComponent(serial)}&limit=1`,
-          { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } }
-        );
-        if (daRes.ok) {
-          const daRows = await daRes.json();
-          const deviceRow = daRows && daRows[0];
-          if (deviceRow && Array.isArray(deviceRow.device_assignments)) {
-            for (const a of deviceRow.device_assignments) {
-              if (a.access_password) validPins.push(String(a.access_password).trim());
-            }
+    // Always check device_assignments.access_password (primary credential source for WorkerDashboard)
+    try {
+      const daRes = await fetch(
+        `${supaUrl.replace(/\/$/, '')}/rest/v1/devices?select=id,device_assignments(access_password)&serial=eq.${encodeURIComponent(serial)}&limit=1`,
+        { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } }
+      );
+      if (daRes.ok) {
+        const daRows = await daRes.json();
+        const deviceRow = daRows && daRows[0];
+        if (deviceRow && Array.isArray(deviceRow.device_assignments)) {
+          for (const a of deviceRow.device_assignments) {
+            if (a.access_password) validPins.push(String(a.access_password).trim());
           }
         }
-      } catch (_) {}
-    }
+      }
+    } catch (_) {}
 
     // Check credentials
     const isPinMatch = validPins.includes(input);
     const isKeyMatch = validKeys.some(k => k.toLowerCase() === input.toLowerCase());
+    const isBindingMatch = dev.binding_code && (input === String(dev.binding_code).trim() || input === String(dev.binding_code).slice(-4));
 
-    if (isPinMatch || isKeyMatch) {
+    if (isPinMatch || isKeyMatch || isBindingMatch) {
       recordSuccess();
       return { authorized: true };
     }
@@ -1372,7 +1371,7 @@ function buildPlayerHtml(serial, screenW, screenH) {
       }
 
       // 3. Raw H264 NAL stream via WebCodecs
-      if (!decoderReady || !decoder || decoder.state === 'closed') {
+      if (!decoderReady || !decoder || decoder.state !== 'configured') {
         if (!initDecoder()) {
           startFallback();
           return;
@@ -1383,7 +1382,10 @@ function buildPlayerHtml(serial, screenW, screenH) {
       if (key) hasKeyframe = true;
       if (!hasKeyframe) return; // Wait for initial keyframe/config (SPS/PPS)
 
-
+      // Prevent decode queue build-up in browser: if decoder is falling behind, drop stale delta frames
+      if (decoder.decodeQueueSize > 4 && !key) {
+        return;
+      }
 
       try {
         const chunk = new EncodedVideoChunk({
@@ -1545,8 +1547,15 @@ function buildPlayerHtml(serial, screenW, screenH) {
       }
     }
 
-    // Complete gesture with ACTION_UP
-    send({ type:'touch', action:1, x:c.x, y:c.y, width:nativeW, height:nativeH, pressure:0 });
+    // Complete gesture with ACTION_UP: ensure minimum 45ms hold time for crisp clicks
+    const timeDown = now - (pointerHistory[0] ? pointerHistory[0].t : now);
+    if (!didMove && timeDown < 45) {
+      setTimeout(() => {
+        send({ type:'touch', action:1, x:c.x, y:c.y, width:nativeW, height:nativeH, pressure:0 });
+      }, 50 - timeDown);
+    } else {
+      send({ type:'touch', action:1, x:c.x, y:c.y, width:nativeW, height:nativeH, pressure:0 });
+    }
   }
 
   canvas.addEventListener('pointerup', releasePointer);
@@ -1923,10 +1932,11 @@ async function startStreamServer(serial, port) {
 
 // ─── Exports ─────────────────────────────────────────────────────────────────
 
-function buildStreamUrl(tunnelDomain, port, serial) {
+function buildStreamUrl(tunnelDomain, port, serial, pin) {
   let cleanDomain = (tunnelDomain || 'agent.dennoh.site').replace(/\/+$/, '');
   const domain = cleanDomain.startsWith('http') ? cleanDomain : `https://${cleanDomain}`;
-  return `${domain}/?udid=${encodeURIComponent(serial)}`;
+  const pinParam = pin ? `&pin=${encodeURIComponent(pin)}` : '';
+  return `${domain}/?udid=${encodeURIComponent(serial)}${pinParam}`;
 }
 
 function killStreamServer(streamProcess) {

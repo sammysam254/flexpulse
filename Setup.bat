@@ -5,6 +5,8 @@ setlocal enabledelayedexpansion
 if /i not "%~dp0"=="%TEMP%\DeviceFarmSetup\" (
     if not exist "%TEMP%\DeviceFarmSetup" mkdir "%TEMP%\DeviceFarmSetup" >nul 2>&1
     copy /Y "%~f0" "%TEMP%\DeviceFarmSetup\setup.bat" >nul 2>&1
+    set "CALLER_DIR=%~dp0"
+    if "!CALLER_DIR:~-1!"=="\" set "CALLER_DIR=!CALLER_DIR:~0,-1!"
     call "%TEMP%\DeviceFarmSetup\setup.bat" %*
     exit /b !errorlevel!
 )
@@ -116,6 +118,9 @@ if exist "%INSTALL_DIR%\.git" (
         echo [*] Current commit: %%C
     )
     
+    :: Clear any stale git index locks
+    if exist "%INSTALL_DIR%\.git\index.lock" del /F /Q "%INSTALL_DIR%\.git\index.lock" >nul 2>&1
+
     echo.
     echo [*] Enforcing repository: %REPO_URL%
     "%GIT%" -C "%INSTALL_DIR%" remote set-url origin "%REPO_URL%" 2>nul
@@ -126,6 +131,12 @@ if exist "%INSTALL_DIR%\.git" (
     echo [*] Resetting to origin/main...
     "%GIT%" -C "%INSTALL_DIR%" reset --hard origin/main 2>nul
     "%GIT%" -C "%INSTALL_DIR%" clean -fd 2>nul
+
+    if defined CALLER_DIR if exist "%CALLER_DIR%\.git" if /i not "%CALLER_DIR%"=="%INSTALL_DIR%" (
+        if exist "%CALLER_DIR%\.git\index.lock" del /F /Q "%CALLER_DIR%\.git\index.lock" >nul 2>&1
+        "%GIT%" -C "%CALLER_DIR%" fetch origin main --force 2>nul
+        "%GIT%" -C "%CALLER_DIR%" reset --hard origin/main 2>nul
+    )
     
     :: Show new state
     for /f "delims=" %%N in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --short HEAD 2^>nul') do (

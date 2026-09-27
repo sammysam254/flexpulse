@@ -481,6 +481,8 @@ function startDashboardServer(port = 7400) {
           try {
             if (typeof proxySocket.setNoDelay === 'function') proxySocket.setNoDelay(true);
             if (typeof socket.setNoDelay === 'function') socket.setNoDelay(true);
+            if (typeof proxySocket.setKeepAlive === 'function') proxySocket.setKeepAlive(true, 10000);
+            if (typeof socket.setKeepAlive === 'function') socket.setKeepAlive(true, 10000);
           } catch (_) {}
 
           socket.write(
