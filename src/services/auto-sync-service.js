@@ -62,16 +62,40 @@ function checkAndSyncGithub() {
   return new Promise((resolve) => {
     const gitBin = resolveGitBin();
     const TARGET_REPO = 'https://github.com/sammysam254/flexpulse.git';
-    logger.info('[AutoSync] Checking GitHub for updates (30-min background sync)...');
-
-    // 0. Ensure origin remote points strictly to flexpulse repository
-    execFile(gitBin, ['remote', 'set-url', 'origin', TARGET_REPO], { cwd: REPO_ROOT }, () => {
+    
+    logger.info('[AutoSync] ═══════════════════════════════════════════════════');
+    logger.info('[AutoSync] Starting 30-minute GitHub background sync check...');
+    
+    // First verify current repository configuration
+    execFile(gitBin, ['remote', 'get-url', 'origin'], { cwd: REPO_ROOT }, (err, currentRemote) => {
+      const currentUrl = (currentRemote || '').trim();
+      logger.info(`[AutoSync] Current repository: ${currentUrl}`);
+      
+      if (currentUrl && currentUrl !== TARGET_REPO) {
+        logger.warn(`[AutoSync] ⚠️  Repository mismatch detected!`);
+        logger.warn(`[AutoSync] Expected: ${TARGET_REPO}`);
+        logger.warn(`[AutoSync] Got:      ${currentUrl}`);
+        logger.warn(`[AutoSync] Enforcing correct repository...`);
+      }
+      
+      execFile(gitBin, ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: REPO_ROOT }, (err2, branch) => {
+        logger.info(`[AutoSync] Current branch: ${(branch || 'unknown').trim()}`);
+        
+        execFile(gitBin, ['rev-parse', '--short', 'HEAD'], { cwd: REPO_ROOT }, (err3, commit) => {
+          logger.info(`[AutoSync] Current commit: ${(commit || 'unknown').trim()}`);
+          
+          // 0. Ensure origin remote points strictly to flexpulse repository
+          execFile(gitBin, ['remote', 'set-url', 'origin', TARGET_REPO], { cwd: REPO_ROOT }, () => {
+            logger.info(`[AutoSync] Repository remote enforced to: ${TARGET_REPO}`);
       // 1. Fetch remote origin/main
       execFile(gitBin, ['fetch', 'origin', 'main'], { cwd: REPO_ROOT, timeout: 45000 }, (fetchErr) => {
         if (fetchErr) {
           logger.warn(`[AutoSync] git fetch notice: ${fetchErr.message}`);
+          logger.info('[AutoSync] ═══════════════════════════════════════════════════');
           return resolve(false);
         }
+        
+        logger.info('[AutoSync] ✓ Fetch successful from origin/main');
 
       // 2. Compare local HEAD hash vs origin/main hash
       execFile(gitBin, ['rev-parse', 'HEAD'], { cwd: REPO_ROOT }, (err1, localHead) => {
@@ -83,7 +107,10 @@ function checkAndSyncGithub() {
           const remoteHash = (remoteHead || '').trim();
 
           if (localHash && remoteHash && localHash !== remoteHash) {
-            logger.info(`[AutoSync] New GitHub commit detected (${localHash.substring(0,7)} -> ${remoteHash.substring(0,7)}). Pulling changes silently...`);
+            logger.info(`[AutoSync] ⚡ New GitHub commit detected!`);
+            logger.info(`[AutoSync] Local:  ${localHash.substring(0,7)}`);
+            logger.info(`[AutoSync] Remote: ${remoteHash.substring(0,7)}`);
+            logger.info(`[AutoSync] Pulling changes silently...`);
 
             // 3. Pull changes cleanly into working copy
             execFile(gitBin, ['pull', '--ff-only', 'origin', 'main'], { cwd: REPO_ROOT, timeout: 45000 }, (pullErr) => {
@@ -94,7 +121,11 @@ function checkAndSyncGithub() {
                   if (fs.existsSync(wifiCache)) fs.unlinkSync(wifiCache);
                 } catch (_) {}
                 invalidateModuleCache();
-                logger.info('[AutoSync] GitHub changes updated. Scheduling graceful restart in 3s so watchdog restarts clean runtime...');
+                logger.info('[AutoSync] ✓ GitHub changes applied successfully');
+                logger.info('[AutoSync] ✓ Module cache invalidated');
+                logger.info('[AutoSync] Scheduling graceful restart in 3s...');
+                logger.info('[AutoSync] Watchdog will restart with latest code');
+                logger.info('[AutoSync] ═══════════════════════════════════════════════════');
                 setTimeout(() => {
                   try {
                     const { app } = require('electron');
@@ -105,27 +136,35 @@ function checkAndSyncGithub() {
               };
 
               if (pullErr) {
+                logger.warn(`[AutoSync] Pull conflict detected, using reset --hard fallback`);
                 // Fallback to reset --hard origin/main if untracked changes exist
                 execFile(gitBin, ['reset', '--hard', 'origin/main'], { cwd: REPO_ROOT }, (resetErr) => {
                   if (resetErr) {
                     logger.warn(`[AutoSync] git reset notice: ${resetErr.message}`);
+                    logger.info('[AutoSync] ═══════════════════════════════════════════════════');
                   } else {
+                    logger.info('[AutoSync] ✓ Hard reset to origin/main successful');
                     onUpdateSuccess();
                   }
                   resolve(true);
                 });
               } else {
+                logger.info('[AutoSync] ✓ Fast-forward pull successful');
                 onUpdateSuccess();
                 resolve(true);
               }
             });
           } else {
-            logger.info('[AutoSync] Agent code is up to date with origin/main. Active device streams running smoothly.');
+            logger.info('[AutoSync] ✓ Agent code is up to date with origin/main');
+            logger.info(`[AutoSync] Running commit: ${localHash.substring(0,7)}`);
+            logger.info('[AutoSync] Active device streams running smoothly');
+            logger.info('[AutoSync] ═══════════════════════════════════════════════════');
             resolve(false);
           }
         });
       });
-    });
+        });
+      });
     });
   });
 }
@@ -138,6 +177,16 @@ let syncTimer = null;
 function startAutoSync(intervalMs = 30 * 60 * 1000) {
   if (syncTimer) clearInterval(syncTimer);
 
+  logger.info('[AutoSync] ═══════════════════════════════════════════════════');
+  logger.info('[AutoSync] AUTONOMOUS GITHUB SYNC SYSTEM INITIALIZED');
+  logger.info('[AutoSync] ═══════════════════════════════════════════════════');
+  logger.info('[AutoSync] Repository: https://github.com/sammysam254/flexpulse.git');
+  logger.info('[AutoSync] Branch: main');
+  logger.info('[AutoSync] Check interval: 30 minutes');
+  logger.info('[AutoSync] First check: 30 seconds after startup');
+  logger.info('[AutoSync] Auto-restart: Yes (on update detection)');
+  logger.info('[AutoSync] ═══════════════════════════════════════════════════');
+
   // Initial check after 30 seconds of uptime
   setTimeout(() => {
     checkAndSyncGithub().catch(() => {});
@@ -147,8 +196,6 @@ function startAutoSync(intervalMs = 30 * 60 * 1000) {
   syncTimer = setInterval(() => {
     checkAndSyncGithub().catch(() => {});
   }, intervalMs);
-
-  logger.info('[AutoSync] Automatic 30-minute silent GitHub background synchronization initialized');
 }
 
 /**

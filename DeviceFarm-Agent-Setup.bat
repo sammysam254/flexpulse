@@ -434,12 +434,22 @@ echo.
 echo  ================================================================
 echo  [OK] Flexpulse Agent is running continuously in the background!
 echo       Dashboard  : http://localhost:7400
-echo       Cloud Sync : Autonomous Direct Real-Time Cloud Sync
+echo       Cloud Sync : Autonomous 30-min GitHub Auto-Update
 echo       Install    : %INSTALL_DIR%
 echo       Status     : Active 24/7 Background Service (Auto-starts on Boot)
 echo  ================================================================
 echo.
-echo  Setup complete. This window will close automatically.
-ping 127.0.0.1 -n 3 >nul 2>nul
+echo  ================================================================
+echo   SETUP COMPLETE - LOGS VISIBLE FOR DEBUGGING
+echo  ================================================================
+echo.
+echo  The agent is now running and will automatically:
+echo   - Pull latest code from GitHub every 30 minutes
+echo   - Restart gracefully when updates are detected
+echo   - Keep devices connected during updates
+echo   - Show all repository operations in agent logs
+echo.
+echo  Press any key to close this window, or leave it open to monitor...
+pause >nul
 exit /b 0
 
