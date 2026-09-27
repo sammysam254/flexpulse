@@ -210,7 +210,7 @@ function startDashboardServer(port = 7400) {
 
         const devices = isLocalHost ? rawDevices.map(d => ({
           ...d,
-          streamUrl: d.streamUrl ? `${d.streamUrl}&token=${sessionToken}` : d.streamUrl,
+          streamUrl: (d.streamUrl && !d.streamUrl.includes('pin=')) ? `${d.streamUrl}&token=${sessionToken}` : d.streamUrl,
         })) : [];
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
