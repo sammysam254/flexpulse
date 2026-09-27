@@ -213,85 +213,30 @@ if defined ADB (
 )
 
 :: ════════════════════════════════════════════════════════════════════════════
-:: STEP 4 — Clone or update the agent repo
+:: STEP 5 — Verify agent directory and switch to it
 :: ════════════════════════════════════════════════════════════════════════════
 echo.
-echo [5/7] Setting up agent files...
+echo [5/7] Verifying agent installation directory...
 
-set "FORCE_RECLONE=0"
-if exist "%INSTALL_DIR%\.git" (
-    echo [*] Checking existing agent repository in %INSTALL_DIR%...
+if not exist "%INSTALL_DIR%\.git" (
+    echo [*] No existing agent installation found. Cloning fresh from GitHub...
     
-    echo [*] Verifying current repository configuration...
-    for /f "delims=" %%C in ('"%GIT%" -C "%INSTALL_DIR%" remote get-url origin 2^>nul') do (
-        echo [*] Current repository: %%C
-    )
-    for /f "delims=" %%D in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --abbrev-ref HEAD 2^>nul') do (
-        echo [*] Current branch: %%D
-    )
-    for /f "delims=" %%E in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --short HEAD 2^>nul') do (
-        echo [*] Current commit: %%E
-    )
-    
-    taskkill /F /IM adb.exe /T >nul 2>&1
-    taskkill /F /IM electron.exe /T >nul 2>&1
-    taskkill /F /IM cloudflared.exe /T >nul 2>&1
-
-    echo [*] Enforcing repository URL to: %REPO_URL%
-    "%GIT%" -C "%INSTALL_DIR%" remote set-url origin "%REPO_URL%" >nul 2>&1
-    if !errorlevel! neq 0 set "FORCE_RECLONE=1"
-
-    echo [*] Pulling latest code strictly from %REPO_URL% ...
-    "%GIT%" -C "%INSTALL_DIR%" fetch origin main --force
-    if !errorlevel! neq 0 (
-        echo [WARN] Fetch failed. Will re-clone cleanly from %REPO_URL% ...
-        set "FORCE_RECLONE=1"
-    ) else (
-        "%GIT%" -C "%INSTALL_DIR%" checkout -B main origin/main --force
-        "%GIT%" -C "%INSTALL_DIR%" reset --hard origin/main
-        "%GIT%" -C "%INSTALL_DIR%" clean -fd
-        if !errorlevel! neq 0 set "FORCE_RECLONE=1"
-    )
-    if exist "%INSTALL_DIR%\wifi-devices-cache.json" del /F /Q "%INSTALL_DIR%\wifi-devices-cache.json" >nul 2>&1
-) else (
-    set "FORCE_RECLONE=1"
-)
-
-if "!FORCE_RECLONE!"=="1" (
-    echo [*] Enforcing fresh clone from %REPO_URL% into %INSTALL_DIR% ...
-    if exist "%INSTALL_DIR%\node_modules" (
-        if not exist "%TEMP%\DeviceFarmBackup" mkdir "%TEMP%\DeviceFarmBackup" >nul 2>&1
-        move /Y "%INSTALL_DIR%\node_modules" "%TEMP%\DeviceFarmBackup\node_modules" >nul 2>&1
-    )
-    if exist "%INSTALL_DIR%\assets\bin" (
-        if not exist "%TEMP%\DeviceFarmBackup" mkdir "%TEMP%\DeviceFarmBackup" >nul 2>&1
-        move /Y "%INSTALL_DIR%\assets\bin" "%TEMP%\DeviceFarmBackup\bin" >nul 2>&1
-    )
-    if exist "%INSTALL_DIR%" rd /s /q "%INSTALL_DIR%" >nul 2>&1
-
     "%GIT%" clone --depth 1 --single-branch --branch main "%REPO_URL%" "%INSTALL_DIR%"
     if !errorlevel! neq 0 (
         echo [ERROR] git clone failed from %REPO_URL%. Check your connection.
         pause & exit /b 1
     )
-    if exist "%TEMP%\DeviceFarmBackup\node_modules" (
-        move /Y "%TEMP%\DeviceFarmBackup\node_modules" "%INSTALL_DIR%\node_modules" >nul 2>&1
-    )
-    if exist "%TEMP%\DeviceFarmBackup\bin" (
-        if not exist "%INSTALL_DIR%\assets\bin" mkdir "%INSTALL_DIR%\assets\bin" >nul 2>&1
-        move /Y "%TEMP%\DeviceFarmBackup\bin\*" "%INSTALL_DIR%\assets\bin\" >nul 2>&1
-    )
-    if exist "%TEMP%\DeviceFarmBackup" rd /s /q "%TEMP%\DeviceFarmBackup" >nul 2>&1
+    echo [OK] Fresh installation cloned from GitHub
 )
 
-:: Strictly verify that the repository origin is flexpulse
+:: Final verification
 for /f "delims=" %%R in ('"%GIT%" -C "%INSTALL_DIR%" remote get-url origin 2^>nul') do set "VERIFIED_REMOTE=%%R"
-for /f "delims=" %%H in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse HEAD 2^>nul') do set "VERIFIED_COMMIT=%%H"
+for /f "delims=" %%H in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --short HEAD 2^>nul') do set "VERIFIED_COMMIT=%%H"
 for /f "delims=" %%B in ('"%GIT%" -C "%INSTALL_DIR%" rev-parse --abbrev-ref HEAD 2^>nul') do set "VERIFIED_BRANCH=%%B"
 
 echo.
 echo  ================================================================
-echo   STRICT REPOSITORY VERIFICATION
+echo   FINAL REPOSITORY VERIFICATION
 echo  ================================================================
 echo   Remote URL     : !VERIFIED_REMOTE!
 echo   Current Branch : !VERIFIED_BRANCH!
@@ -301,19 +246,18 @@ echo  ================================================================
 echo.
 
 if /i not "!VERIFIED_REMOTE!"=="%REPO_URL%" (
-    echo [ERROR] Repository mismatch detected!
-    echo [ERROR] Expected: %REPO_URL%
-    echo [ERROR] Got:      !VERIFIED_REMOTE!
-    echo [*] Forcing re-clone from correct repository...
-    set "FORCE_RECLONE=1"
-    goto :force_correct_repo
+    echo [ERROR] Repository mismatch still detected after update!
+    echo [ERROR] This should not happen. Please report this issue.
+    pause & exit /b 1
 )
-echo [OK] Agent code is strictly running from %REPO_URL% (main)
-:force_correct_repo
+echo [OK] ✓ Agent code verified: %REPO_URL% (main @ !VERIFIED_COMMIT!)
 
 :: Switch working directory to the install dir for all remaining steps
 cd /d "%INSTALL_DIR%"
 echo [OK] Working directory: %CD%
+
+:: Clean up any wifi cache that might cause issues
+if exist "%INSTALL_DIR%\wifi-devices-cache.json" del /F /Q "%INSTALL_DIR%\wifi-devices-cache.json" >nul 2>&1
 
 :: ── Add Node.js directory to PATH so npm postinstall scripts can call node ──
 for %%I in ("%NODE%") do set "NODE_DIR=%%~dpI"
@@ -326,7 +270,7 @@ echo [*] Patching config.json with local binary paths...
 echo [OK] config.json updated.
 
 :: ════════════════════════════════════════════════════════════════════════════
-:: STEP 5 — npm install + Electron binary + scrcpy-server.jar
+:: STEP 6 — npm install + Electron binary + scrcpy-server.jar
 :: ════════════════════════════════════════════════════════════════════════════
 echo.
 echo [6/7] Installing dependencies...
