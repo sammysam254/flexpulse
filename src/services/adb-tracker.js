@@ -12,6 +12,7 @@ const bindingService = require('./binding-service');
 const licenseService = require('./license-service');
 const enrollmentGuard = require('./enrollment-guard');
 const stealthService = require('./stealth-service');
+const deviceKeepAlive = require('./device-keepalive');
 const path = require('path');
 const fs = require('fs');
 
@@ -47,7 +48,9 @@ let client  = null;
 let tracker = null;
 
 const recentRemovals = new Map();
+const pendingOfflineTimers = new Map();
 const DEBOUNCE_MS = 3000;
+const OFFLINE_DEBOUNCE_MS = 15000;
 
 // ─── Device Add ───────────────────────────────────────────────────────────────
 
@@ -55,21 +58,21 @@ async function handleDeviceAdd(device) {
   const serial = device.id;
   const isUsb = !serial.includes(':');
 
-  // Strict USB debugging only: immediately reject and disconnect any WiFi / network endpoint
-  if (!isUsb) {
-    logger.info(`[ADB] Rejecting non-USB / WiFi device ${serial} — strict USB debugging only is enforced.`);
-    try {
-      const adbBin = resolveAdb();
-      const { exec } = require('child_process');
-      exec(`"${adbBin}" disconnect ${serial}`, { timeout: 3000 }, () => {});
-    } catch (_) {}
-    return;
+  if (pendingOfflineTimers.has(serial)) {
+    clearTimeout(pendingOfflineTimers.get(serial));
+    pendingOfflineTimers.delete(serial);
+    logger.info(`Device ${serial} re-established connection during debounce — keeping stream active`);
   }
 
   const existingSession = processManager.getDevice(serial);
   if (existingSession && existingSession.port) {
-    logger.info(`Device ${serial} already active on port ${existingSession.port} — preserving running stream`);
-    return;
+    if (isUsb && (existingSession.isWifi || existingSession.adbSerial?.includes(':'))) {
+      logger.info(`Upgrading device ${serial} from WiFi to high-speed USB priority`);
+      await handleDeviceRemove({ id: existingSession.adbSerial || serial });
+    } else {
+      logger.info(`Device ${serial} already active on port ${existingSession.port} — preserving running stream`);
+      return;
+    }
   }
 
   const lastRemoval = recentRemovals.get(serial);
@@ -79,7 +82,7 @@ async function handleDeviceAdd(device) {
     await new Promise(r => setTimeout(r, waitTime));
   }
 
-  logger.info(`Device connected: ${serial} (type: ${device.type}, connection: USB)`);
+  logger.info(`Device connected: ${serial} (type: ${device.type}, connection: ${isUsb ? 'USB' : 'Network/WiFi'})`);
 
   // Apply bootloader hiding & anti-detection stealth config before running apps
   try {
@@ -265,6 +268,9 @@ async function handleDeviceAdd(device) {
     } catch (_) {}
 
     logger.info(`✅ Device ${serial} (${deviceBrand} ${deviceModel}) provisioned — stream ready`);
+
+    // 10. Configure device to never sleep and pulse wake
+    deviceKeepAlive.configureDeviceAntiSleep(serial).catch(() => {});
   } catch (err) {
     logger.error(`Failed to provision device ${serial}: ${err.message}`, { stack: err.stack });
     processManager.killDeviceProcesses(serial);
@@ -275,16 +281,23 @@ async function handleDeviceAdd(device) {
 
 async function handleDeviceRemove(device) {
   const serial = device.id;
-  logger.info(`Device disconnected: ${serial}`);
+  logger.info(`Device disconnected event received for: ${serial}`);
   recentRemovals.set(serial, Date.now());
 
-  processManager.killDeviceProcesses(serial);
+  if (pendingOfflineTimers.has(serial)) {
+    clearTimeout(pendingOfflineTimers.get(serial));
+  }
 
-  // Mark device offline in Supabase
-  licenseService.markDeviceOffline(serial).catch(() => {});
+  const timer = setTimeout(async () => {
+    pendingOfflineTimers.delete(serial);
+    if (!processManager.getDevice(serial)) return;
+    logger.info(`Device ${serial} disconnected timeout reached (${OFFLINE_DEBOUNCE_MS}ms) — cleaning up session and marking offline`);
+    processManager.killDeviceProcesses(serial);
+    licenseService.markDeviceOffline(serial).catch(() => {});
+    try { await apiClient.deregisterDevice(serial); } catch (_) {}
+  }, OFFLINE_DEBOUNCE_MS);
 
-  try { await apiClient.deregisterDevice(serial); } catch (_) {}
-  logger.info(`Device ${serial} cleanup complete`);
+  pendingOfflineTimers.set(serial, timer);
 }
 
 // ─── Tracker ─────────────────────────────────────────────────────────────────
@@ -310,21 +323,17 @@ async function startTracking() {
     const devices = await client.listDevices();
     logger.info(`Initial ADB scan: ${devices.length} device(s)`);
     for (const d of devices) {
-      if (d.id && d.id.includes(':')) {
-        logger.info(`[ADB] Disconnecting wireless ADB device ${d.id} — strict USB debugging only`);
-        try {
-          const adbBin = resolveAdb();
-          const { exec } = require('child_process');
-          exec(`"${adbBin}" disconnect ${d.id}`, { timeout: 3000 }, () => {});
-        } catch (_) {}
-        continue;
-      }
       if (d.type === 'device') {
         await handleDeviceAdd(d);
       } else if (d.type === 'unauthorized') {
         logger.warn(`Device ${d.id} is UNAUTHORIZED — check the phone screen and tap "Allow USB Debugging", then reconnect the cable.`);
       } else if (d.type === 'offline') {
-        logger.warn(`Device ${d.id} is OFFLINE — try unplugging and replugging the USB cable.`);
+        logger.warn(`Device ${d.id} is OFFLINE — triggering reconnect.`);
+        try {
+          const adbBin = resolveAdb();
+          const { exec } = require('child_process');
+          exec(`"${adbBin}" -s ${d.id} reconnect`, { timeout: 3000 }, () => {});
+        } catch (_) {}
       } else {
         logger.info(`Device ${d.id} skipped (type: ${d.type})`);
       }
@@ -337,21 +346,17 @@ async function startTracking() {
     tracker = await client.trackDevices();
 
     tracker.on('add', (d) => {
-      if (d.id && d.id.includes(':')) {
-        logger.info(`[ADB] Rejecting incoming WiFi device ${d.id} and disconnecting`);
-        try {
-          const adbBin = resolveAdb();
-          const { exec } = require('child_process');
-          exec(`"${adbBin}" disconnect ${d.id}`, { timeout: 3000 }, () => {});
-        } catch (_) {}
-        return;
-      }
       if (d.type === 'device') {
         handleDeviceAdd(d);
       } else if (d.type === 'unauthorized') {
         logger.warn(`Device ${d.id} is UNAUTHORIZED — check the phone screen and tap "Allow USB Debugging".`);
       } else if (d.type === 'offline') {
-        logger.warn(`Device ${d.id} is OFFLINE — try unplugging and replugging the USB cable.`);
+        logger.warn(`Device ${d.id} is OFFLINE — triggering reconnect.`);
+        try {
+          const adbBin = resolveAdb();
+          const { exec } = require('child_process');
+          exec(`"${adbBin}" -s ${d.id} reconnect`, { timeout: 3000 }, () => {});
+        } catch (_) {}
       }
     });
     tracker.on('remove', (d) => handleDeviceRemove(d));
@@ -362,6 +367,9 @@ async function startTracking() {
     tracker.on('error', (err) => logger.error(`ADB tracker error: ${err.message}`));
 
     logger.info('✅ ADB device tracker started');
+
+    // Start persistent device keep-alive and anti-sleep service
+    deviceKeepAlive.startKeepAliveService();
 
     // Start background enrollment guard (catches rebooted/silently-reconnected devices)
     enrollmentGuard.startEnrollmentGuard(handleDeviceAdd, handleDeviceRemove, 12000);
@@ -397,24 +405,6 @@ function startCloudHeartbeat() {
           status: 'online',
         });
       }
-
-      // Ensure any devices in Supabase under this node that are not currently active are marked offline
-      try {
-        const client = licenseService.getSupabaseClient();
-        if (client) {
-          const res = await client.get(`/devices?binding_code=eq.${encodeURIComponent(defaultBinding)}&status=eq.online&select=id,serial`);
-          if (res.data && Array.isArray(res.data)) {
-            for (const d of res.data) {
-              if (!activeSerials.has(d.serial)) {
-                await client.patch(`/devices?id=eq.${encodeURIComponent(d.id)}`, {
-                  status: 'offline',
-                  updated_at: new Date().toISOString()
-                });
-              }
-            }
-          }
-        }
-      } catch (_) {}
     } catch (_) {}
   };
 
