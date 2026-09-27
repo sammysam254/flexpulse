@@ -26,11 +26,11 @@ electronPath = scriptDir & "\node_modules\electron\dist\electron.exe"
 
 If fso.FileExists(watchdogPath) Then
     ' Run via watchdog to ensure auto-restart on crashes/closure
-    cmdToRun = "%comspec% /c " & nodePath & " """ & watchdogPath & """"
+    cmdToRun = nodePath & " """ & watchdogPath & """"
 ElseIf fso.FileExists(electronPath) Then
     cmdToRun = """" & electronPath & """ """ & scriptDir & "\src\main\index.js"""
 Else
-    cmdToRun = "%comspec% /c cd /d """ & scriptDir & """ && npm start"
+    cmdToRun = "cmd.exe /c ""cd /d """ & scriptDir & """ && npm start"""
 End If
 
 ' Set current working directory
