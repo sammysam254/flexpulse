@@ -61,11 +61,19 @@ function startAgent() {
 
   const args = [mainScript, '--hidden'];
 
+  let stdioOption = 'ignore';
+  try {
+    const logsDir = path.join(rootDir, 'logs');
+    if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+    const errFd = fs.openSync(path.join(logsDir, 'watchdog-error.log'), 'a');
+    stdioOption = ['ignore', 'ignore', errFd];
+  } catch (_) {}
+
   try {
     activeChild = spawn(electronExe, args, {
       cwd: rootDir,
       windowsHide: true,
-      stdio: 'ignore',
+      stdio: stdioOption,
       detached: false,
       env: { ...process.env, BACKGROUND_SERVICE: '1' }
     });

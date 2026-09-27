@@ -51,7 +51,7 @@ taskkill /F /IM adb.exe /T >nul 2>&1
   "Get-NetTCPConnection -LocalPort 7400 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } catch {} };" ^
   "Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -ge 8100 -and $_.LocalPort -le 8900 } | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } catch {} };" ^
   "Get-CimInstance Win32_Process | Where-Object { ($_.Name -like 'node*' -and $_.CommandLine -and ($_.CommandLine.IndexOf('service-watchdog.js') -ge 0 -or $_.CommandLine.IndexOf('DeviceFarm') -ge 0 -or $_.CommandLine.IndexOf('devicefarm-agent') -ge 0 -or $_.CommandLine.IndexOf('flexpulse') -ge 0 -or $_.CommandLine.IndexOf('diamt') -ge 0 -or $_.CommandLine.IndexOf('electron') -ge 0)) } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }" >nul 2>&1
-timeout /t 2 /nobreak >nul
+ping 127.0.0.1 -n 3 >nul 2>&1
 
 
 
@@ -103,7 +103,7 @@ if exist "%INSTALL_DIR%\.git" (
     taskkill /F /IM electron.exe /T >nul 2>&1
     taskkill /F /IM cloudflared.exe /T >nul 2>&1
     taskkill /F /IM node.exe /T >nul 2>&1
-    timeout /t 1 /nobreak >nul
+    ping 127.0.0.1 -n 2 >nul 2>&1
     
     :: Show current state
     for /f "delims=" %%R in ('"%GIT%" -C "%INSTALL_DIR%" remote get-url origin 2^>nul') do (
