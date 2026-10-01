@@ -47,6 +47,7 @@ echo.
 echo [*] Terminating all previous agent processes, legacy folders, tunnels, and releasing ports...
 taskkill /F /IM cloudflared.exe /T >nul 2>&1
 taskkill /F /IM electron.exe /T >nul 2>&1
+taskkill /F /IM node.exe /T >nul 2>&1
 taskkill /F /IM scrcpy.exe /T >nul 2>&1
 taskkill /F /IM adb.exe /T >nul 2>&1
 "%PS%" -NoProfile -ExecutionPolicy Bypass -Command ^
