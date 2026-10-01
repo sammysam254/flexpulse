@@ -295,17 +295,31 @@ app.whenReady().then(async () => {
     const { url } = await startDashboardServer(7400);
     logger.info(`[Dashboard] DeviceFarm Agent Dashboard live at ${url}`);
 
-    // Connect 24/7 Cloudflare Zero Trust tunnel for agent.dennoh.site only if physical devices are connected
+    // Connect 24/7 Cloudflare Zero Trust tunnel for agent.dennoh.site
     try {
-      const adb = require('@devicefarmer/adbkit');
-      const Adb = adb.Adb || adb.default || adb;
-      const adbClient = Adb.createClient();
-      const devList = await adbClient.listDevices().catch(() => []);
-      if (devList && devList.length > 0) {
+      let hasToken = false;
+      try {
+        const cfgPath = path.join(process.cwd(), 'config.json');
+        if (fs.existsSync(cfgPath)) {
+          const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+          hasToken = Boolean(cfg.cloudflareToken || cfg.cloudflaredToken || cfg.token || process.env.CLOUDFLARE_TUNNEL_TOKEN);
+        }
+      } catch (_) {}
+
+      if (hasToken) {
         const { createTunnel } = require('../services/tunnel-service');
         createTunnel(7400).catch(tErr => logger.warn(`Tunnel setup notice: ${tErr.message}`));
       } else {
-        logger.info('[Tunnel] No physical devices attached to this host — Cloudflare tunnel deferred to prevent conflicting with active farm nodes');
+        const adb = require('@devicefarmer/adbkit');
+        const Adb = adb.Adb || adb.default || adb;
+        const adbClient = Adb.createClient();
+        const devList = await adbClient.listDevices().catch(() => []);
+        if (devList && devList.length > 0) {
+          const { createTunnel } = require('../services/tunnel-service');
+          createTunnel(7400).catch(tErr => logger.warn(`Tunnel setup notice: ${tErr.message}`));
+        } else {
+          logger.info('[Tunnel] No physical devices attached to this host — Cloudflare tunnel deferred');
+        }
       }
     } catch (_) {}
 
