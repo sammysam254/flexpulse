@@ -1861,6 +1861,12 @@ async function startStreamServer(serial, port) {
 
     const url = new URL(req.url, `http://localhost:${port}`);
     const p   = url.pathname;
+
+    if (p === '/health' || p === '/healthz' || p === '/ping') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache, no-store' });
+      res.end(JSON.stringify({ status: 'ok', port, serial }));
+      return;
+    }
     const reqUdid = (url.searchParams.get('udid') || '').trim();
     const candidateAuth = (url.searchParams.get('pin') || url.searchParams.get('key') || url.searchParams.get('token') || '').trim();
     const candidateUserId = (url.searchParams.get('user_id') || '').trim();

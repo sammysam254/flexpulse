@@ -66,10 +66,32 @@ function getActiveSerials() {
  * @returns {Array<{ serial: string, model: string, brand: string, port: number, streamUrl: string, isPaid: boolean, paymentStatus: string, monthlyFeeUsd: number }>}
  */
 function getActiveDeviceSummaries() {
+  const seenPorts = new Set();
+  const seenSerials = new Set();
   const summaries = [];
-  for (const [serial, session] of activeSessions.entries()) {
+
+  // Sort entries so physical hardware serials (non-IP) come first
+  const entries = Array.from(activeSessions.entries()).sort(([a], [b]) => {
+    const aIsIp = a.includes(':');
+    const bIsIp = b.includes(':');
+    if (aIsIp && !bIsIp) return 1;
+    if (!aIsIp && bIsIp) return -1;
+    return 0;
+  });
+
+  for (const [key, session] of entries) {
+    if (!session || !session.port) continue;
+    const primarySerial = session.hardwareSerial || session.serial || key;
+    if (seenPorts.has(session.port) || seenSerials.has(primarySerial)) {
+      continue;
+    }
+    seenPorts.add(session.port);
+    seenSerials.add(primarySerial);
+
     summaries.push({
-      serial: session.serial,
+      serial: primarySerial,
+      adbSerial: session.adbSerial || key,
+      hardwareSerial: session.hardwareSerial || primarySerial,
       model: session.model,
       brand: session.brand,
       port: session.port,
@@ -77,6 +99,8 @@ function getActiveDeviceSummaries() {
       paymentStatus: session.paymentStatus,
       isPaid: session.isPaid,
       monthlyFeeUsd: session.monthlyFeeUsd,
+      isWifi: session.isWifi,
+      isUsb: session.isUsb,
     });
   }
   return summaries;

@@ -184,6 +184,16 @@ function startDashboardServer(port = 7400) {
       const fullUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       const url = fullUrl.pathname;
 
+      // ── Cloudflare Tunnel Health Check Probe ─────────────────────────
+      if (url === '/health' || url === '/healthz' || url === '/ping') {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store',
+        });
+        res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() }));
+        return;
+      }
+
       // ── API Routes ────────────────────────────────────────────────────────
       // ── Public endpoint for initial binding code (no auth required) ────
       if (url === '/api/binding/code') {
@@ -198,11 +208,40 @@ function startDashboardServer(port = 7400) {
         return;
       }
 
+      // ── Active Rescan & Reconnect Endpoint ─────────────────────────────────
+      if (url === '/api/devices/rescan' || url === '/api/rescan') {
+        try {
+          const networkDeviceScanner = require('../services/network-device-scanner');
+          const enrollmentGuard = require('../services/enrollment-guard');
+          networkDeviceScanner.scanAndConnectAll().catch(() => {});
+          await enrollmentGuard.runRecoveryCheck(true).catch(() => {});
+        } catch (_) {}
+
+        const bindingCode = bindingService.getOrGenerateBindingCode();
+        const lic = await licenseService.checkLicenseStatus(bindingCode);
+        const rawDevices = processManager.getActiveDeviceSummaries();
+        const enrollmentGuard = require('../services/enrollment-guard');
+        const diag = enrollmentGuard.getDeviceDiagnostics ? enrollmentGuard.getDeviceDiagnostics() : {};
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'ok',
+          bindingCode,
+          count: rawDevices.length,
+          devices: rawDevices,
+          diagnostics: diag,
+          timestamp: new Date().toISOString()
+        }));
+        return;
+      }
+
       if (url === '/api/devices') {
         const bindingCode = bindingService.getOrGenerateBindingCode();
         const lic = await licenseService.checkLicenseStatus(bindingCode);
         const rawDevices = processManager.getActiveDeviceSummaries();
         const sessionToken = storeBindingCodeInSession(bindingCode);
+        const enrollmentGuard = require('../services/enrollment-guard');
+        const diag = enrollmentGuard.getDeviceDiagnostics ? enrollmentGuard.getDeviceDiagnostics() : {};
 
         const remoteIp = req.socket.remoteAddress || '';
         const hostHeader = req.headers.host || '';
@@ -223,6 +262,7 @@ function startDashboardServer(port = 7400) {
           licenseMode: lic.mode,
           count: isLocalHost ? rawDevices.length : 0,
           devices: devices,
+          diagnostics: diag,
           isRemote: !isLocalHost,
           timestamp: new Date().toISOString()
         }));

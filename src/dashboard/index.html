@@ -335,7 +335,7 @@
           All connected Android devices synchronize directly to your Flexpulse Cloud Dashboard in real time without requiring manual machine binding codes.
         </div>
       </div>
-      <button class="btn-action btn-primary" style="padding: 12px 20px; font-size: 14px;" onclick="fetchDevices()">
+      <button class="btn-action btn-primary" style="padding: 12px 20px; font-size: 14px;" onclick="fetchDevices(true)">
         🔄 Sync Devices Now
       </button>
     </section>
@@ -344,7 +344,7 @@
     <section aria-label="Connected Devices List">
       <div class="section-header">
         <h2 class="section-title">Connected Devices</h2>
-        <button class="btn-action" onclick="fetchDevices()">🔄 Refresh</button>
+        <button class="btn-action" onclick="fetchDevices(true)">🔄 Refresh</button>
       </div>
 
       <div id="devicesContainer" class="devices-grid">
@@ -420,9 +420,15 @@
       `;
     }
 
-    async function fetchDevices() {
+    async function fetchDevices(forceRescan = false) {
+      const container = document.getElementById('devicesContainer');
+      if (forceRescan) {
+        container.innerHTML = getLoaderHtml('SCANNING USB & 10.1.10.x FARM NETWORK', 'Auto-connecting devices and refreshing ADB pipelines...');
+      }
+
       try {
-        const res = await fetch('/api/devices');
+        const endpoint = forceRescan ? '/api/devices/rescan' : '/api/devices';
+        const res = await fetch(endpoint);
         const data = await res.json();
 
         if (data.status === 'ok') {
@@ -441,14 +447,14 @@
 
           document.getElementById('statLicenseMode').innerText = (data.licenseMode || 'LICENSED').toUpperCase();
 
-          renderDevices(data.devices || [], isRemoteHost);
+          renderDevices(data.devices || [], isRemoteHost, data.diagnostics || {});
         }
       } catch (err) {
         console.error('Error fetching devices:', err);
       }
     }
 
-    function renderDevices(devices, isRemoteHost) {
+    function renderDevices(devices, isRemoteHost, diagnostics = {}) {
       const container = document.getElementById('devicesContainer');
 
       if (isRemoteHost || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
@@ -470,7 +476,10 @@
         return;
       }
 
-      if (!devices || devices.length === 0) {
+      const unauthorized = diagnostics.unauthorized || [];
+      const offline = diagnostics.offline || [];
+
+      if ((!devices || devices.length === 0) && unauthorized.length === 0 && offline.length === 0) {
         container.innerHTML = `
           <div class="empty-state">
             <div style="margin-bottom: 12px; display: flex; justify-content: center;">
@@ -482,13 +491,69 @@
               </div>
             </div>
             <div style="font-size: 16px; font-weight: 700;">No Devices Connected</div>
-            <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Plug in Android phones via USB with USB Debugging turned on.</div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">Plug in Android phones via USB (or connect to 10.1.10.x WiFi) with USB Debugging turned on.</div>
+            <button class="btn-action btn-primary" style="margin-top: 14px;" onclick="fetchDevices(true)">🔍 Deep Scan USB & Network</button>
           </div>
         `;
         return;
       }
 
-      container.innerHTML = devices.map(d => {
+      let extraCardsHtml = '';
+
+      // Render Unauthorized Devices Card
+      for (const u of unauthorized) {
+        extraCardsHtml += `
+          <div class="device-card" style="border-color: rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.04);">
+            <div class="device-card-head">
+              <div>
+                <div class="device-name" style="color: #fbbf24;">⚠️ Phone Unauthorized</div>
+                <div class="device-sub">${u}</div>
+              </div>
+              <span style="padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; background: rgba(245, 158, 11, 0.2); color: #fbbf24;">
+                ACTION REQUIRED
+              </span>
+            </div>
+            <div class="stream-box" style="padding: 12px;">
+              <div style="font-size: 12px; color: #fbbf24; font-weight: 700; margin-bottom: 6px;">
+                🔑 Prompt waiting on phone screen
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-bottom: 10px;">
+                Unlock the device screen and tap <strong>"Always allow USB debugging from this computer"</strong>, then click Refresh below.
+              </div>
+              <button class="btn-action" style="padding: 6px 12px; font-size: 11px;" onclick="fetchDevices(true)">
+                🔄 Check Authorization Again
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      // Render Offline Devices Card
+      for (const o of offline) {
+        extraCardsHtml += `
+          <div class="device-card" style="border-color: rgba(148, 163, 184, 0.3); opacity: 0.85;">
+            <div class="device-card-head">
+              <div>
+                <div class="device-name" style="color: #cbd5e1;">Device Offline / Reconnecting</div>
+                <div class="device-sub">${o}</div>
+              </div>
+              <span style="padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; background: rgba(148, 163, 184, 0.2); color: #cbd5e1;">
+                RECONNECTING
+              </span>
+            </div>
+            <div class="stream-box" style="padding: 12px;">
+              <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">
+                Autonomous watchdog is sending reconnect pulses to this device...
+              </div>
+              <button class="btn-action" style="padding: 6px 12px; font-size: 11px;" onclick="fetchDevices(true)">
+                ⚡ Force Reconnect Now
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      const deviceCardsHtml = (devices || []).map(d => {
         const pin = currentBindingCode || '';
         const token = currentSessionToken || '';
         const localStreamPath = `/?udid=${encodeURIComponent(d.serial)}&pin=${encodeURIComponent(pin)}&token=${encodeURIComponent(token)}`;
@@ -541,8 +606,9 @@
               </div>
             </div>
           </div>
-        `;
       }).join('');
+
+      container.innerHTML = extraCardsHtml + deviceCardsHtml;
     }
 
     function openInlineViewer(serial, model, port) {
