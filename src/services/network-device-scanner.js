@@ -160,43 +160,12 @@ async function scanSubnet(prefix, adbBin) {
 
 /**
  * Master scan & connect routine:
- * 1. Immediately connects to all known static farm device endpoints.
- * 2. Scans local subnets for any newly added / DHCP Android devices on port 5555.
+ * Disabled in USB debugging mode: all devices are physically connected via USB cables.
  * @returns {Promise<{ connected: string[], totalScanned: number }>}
  */
 async function scanAndConnectAll() {
-  const adbBin = resolveAdb();
-  logger.info('[NetScanner] Starting autonomous network device scan & connect...');
-
-  const connectedList = [];
-
-  // Step 1: Connect to known static farm devices in parallel
-  const knownResults = await Promise.all(
-    KNOWN_FARM_ENDPOINTS.map(async (endpoint) => {
-      const ok = await adbConnectEndpoint(endpoint, adbBin);
-      return { endpoint, ok };
-    })
-  );
-
-  for (const r of knownResults) {
-    if (r.ok) connectedList.push(r.endpoint);
-  }
-
-  // Step 2: Scan detected subnets for additional devices
-  const subnets = getLocalSubnetPrefixes();
-  for (const sub of subnets) {
-    try {
-      const found = await scanSubnet(sub, adbBin);
-      for (const ep of found) {
-        if (!connectedList.includes(ep)) connectedList.push(ep);
-      }
-    } catch (e) {
-      logger.warn(`[NetScanner] Subnet scan notice for ${sub}: ${e.message}`);
-    }
-  }
-
-  logger.info(`[NetScanner] Scan complete. Connected endpoints: ${connectedList.length > 0 ? connectedList.join(', ') : 'none'}`);
-  return { connected: connectedList };
+  logger.info('[NetScanner] Direct USB debugging active — network/WiFi scanning bypassed.');
+  return { connected: [] };
 }
 
 module.exports = {

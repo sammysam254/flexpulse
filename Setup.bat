@@ -391,12 +391,8 @@ if not exist "%ADB_BIN%" set "ADB_BIN=adb"
 echo [*] Refreshing ADB server...
 "%ADB_BIN%" start-server >nul 2>&1
 
-:: Auto-connect to all farm network/WiFi devices
-echo [*] Auto-connecting known farm WiFi devices (10.1.10.x)...
-for %%I in (10.1.10.49:5555 10.1.10.79:5555 10.1.10.100:5555 10.1.10.173:5555 10.1.10.197:5555) do (
-    "%ADB_BIN%" connect %%I >nul 2>&1
-)
-
+:: Refresh USB connected ADB devices
+echo [*] USB Debugging mode: Refreshing physically connected hardware devices...
 "%ADB_BIN%" reconnect >nul 2>&1
 ping 127.0.0.1 -n 2 >nul
 
