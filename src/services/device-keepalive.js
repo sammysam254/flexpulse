@@ -62,14 +62,15 @@ async function configureDeviceAntiSleep(serial) {
 }
 
 /**
- * Send non-intrusive wake signal to ensure display remains awake and active.
- * Keyevent 224 (KEYCODE_WAKEUP) wakes the screen if it was off, but does NOT toggle it off if already on.
+ * Send non-intrusive wake and unlock signals to ensure display remains awake and active.
+ * Keyevent 224 (KEYCODE_WAKEUP) wakes the screen.
+ * Keyevent 82 (KEYCODE_MENU) dismisses the lockscreen.
  */
 async function sendDeviceWakePulse(serial) {
   if (!serial) return;
   const adbBin = resolveAdb();
   return new Promise(resolve => {
-    exec(`"${adbBin}" -s ${serial} shell input keyevent 224`, { timeout: 3000 }, () => resolve());
+    exec(`"${adbBin}" -s ${serial} shell "input keyevent 224; input keyevent 82"`, { timeout: 3000 }, () => resolve());
   });
 }
 

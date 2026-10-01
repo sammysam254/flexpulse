@@ -61,12 +61,12 @@ function invalidateModuleCache() {
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 
-async function checkAndSyncGithub() {
+async function checkAndSyncGithub(forceRestart = false) {
   const gitBin = resolveGitBin();
   const TARGET_REPO = 'https://github.com/sammysam254/flexpulse.git';
 
   logger.info('[AutoSync] ═══════════════════════════════════════════════════');
-  logger.info('[AutoSync] Starting 6-hour GitHub background sync check...');
+  logger.info(`[AutoSync] Starting GitHub sync check (forceRestart=${forceRestart})...`);
 
   try {
     // First verify current repository configuration
@@ -124,12 +124,12 @@ async function checkAndSyncGithub() {
         logger.info('[AutoSync] ✓ GitHub changes applied successfully');
         logger.info('[AutoSync] ✓ Module cache invalidated');
 
-        // Restrict restarts strictly to the night maintenance window (00:00 - 06:00 local time)
+        // Restrict automatic scheduled restarts to night, but allow explicit force restarts
         const hour = new Date().getHours();
         const isNightWindow = (hour >= 0 && hour < 6);
 
-        if (isNightWindow) {
-          logger.info('[AutoSync] 🌙 Night maintenance window active (00:00 - 06:00). Scheduling restart in 5s...');
+        if (isNightWindow || forceRestart) {
+          logger.info(`[AutoSync] 🌙 Restarting agent in 3s (nightWindow=${isNightWindow}, forceRestart=${forceRestart})...`);
           logger.info('[AutoSync] Watchdog will restart with latest code');
           logger.info('[AutoSync] ═══════════════════════════════════════════════════');
           setTimeout(() => {
@@ -138,7 +138,7 @@ async function checkAndSyncGithub() {
               if (app && app.quit) app.quit();
             } catch (_) {}
             process.exit(0);
-          }, 5000);
+          }, 3000);
         } else {
           logger.info(`[AutoSync] ☀️ Daytime active (${new Date().toLocaleTimeString()}). Restart deferred to night maintenance window (00:00 - 06:00) so active worker device streams remain 100% uninterrupted.`);
           logger.info('[AutoSync] ═══════════════════════════════════════════════════');
@@ -166,6 +166,16 @@ async function checkAndSyncGithub() {
     } else {
       logger.info('[AutoSync] ✓ Agent code is up to date with origin/main');
       logger.info(`[AutoSync] Running commit: ${localHash.substring(0,7)}`);
+      if (forceRestart) {
+        logger.info('[AutoSync] Force restart requested — restarting agent in 3s...');
+        setTimeout(() => {
+          try {
+            const { app } = require('electron');
+            if (app && app.quit) app.quit();
+          } catch (_) {}
+          process.exit(0);
+        }, 3000);
+      }
       logger.info('[AutoSync] Active device streams running smoothly');
       logger.info('[AutoSync] ═══════════════════════════════════════════════════');
       return false;

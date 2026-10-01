@@ -67,18 +67,38 @@ function getStreamBlockedHtml(serial, checkoutUrl, s = {}) {
 }
 
 // ─── Screencap fallback (one-shot, for /screen.jpg HTTP endpoint) ────────────
+const SCREEN_CACHE = new Map(); // serial -> { buf, expiresAt }
 
 function captureOneFrame(serial) {
+  const cached = SCREEN_CACHE.get(serial);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now && cached.buf) {
+    return Promise.resolve(cached.buf);
+  }
+
   return new Promise((resolve) => {
-    const p = spawn(ADB_BIN, ['-s', serial, 'exec-out', 'screencap -p'], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    const p = spawn(ADB_BIN, ['-s', serial, 'exec-out', 'screencap', '-p'], {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'ignore']
+    });
     const chunks = [];
+    const timer = setTimeout(() => {
+      try { p.kill(); } catch (_) {}
+      resolve(null);
+    }, 3500);
+
     p.stdout.on('data', c => chunks.push(c));
     p.on('close', code => {
+      clearTimeout(timer);
       if (code !== 0 || !chunks.length) return resolve(null);
-      // exec-out via spawn stdio:pipe delivers clean binary — no CRLF stripping needed
-      resolve(Buffer.concat(chunks));
+      const buf = Buffer.concat(chunks);
+      SCREEN_CACHE.set(serial, { buf, expiresAt: now + 300 });
+      resolve(buf);
     });
-    p.on('error', () => resolve(null));
+    p.on('error', () => {
+      clearTimeout(timer);
+      resolve(null);
+    });
   });
 }
 
@@ -173,7 +193,20 @@ function handleControl(type, data, serial, engine) {
   } else if (type === 'expand_notifications' || type === 'notifications') {
     exec(`"${ADB_BIN}" -s ${serial} shell cmd statusbar expand`);
   } else if (type === 'wake' || type === 'refresh') {
-    try { adbInput(serial, 'input keyevent 224'); } catch (_) {}
+    try {
+      adbInput(serial, 'svc power stayon true; settings put global stay_on_while_plugged_in 7; input keyevent 224; input keyevent 82');
+      if (engine && typeof engine.captureLivePng === 'function') {
+        engine.captureLivePng().then(png => {
+          if (png && engine.wsClients) {
+            for (const ws of engine.wsClients) {
+              if (ws.readyState === 1) {
+                try { ws.send(png, { binary: true }); } catch (_) {}
+              }
+            }
+          }
+        }).catch(() => {});
+      }
+    } catch (_) {}
   }
 }
 
@@ -1327,27 +1360,27 @@ function buildPlayerHtml(serial, screenW, screenH) {
   let wsRetryTimer = null;
   let lastFrameReceivedTime = 0;
 
-  // Fallback watchdog: only fires if WS is connected but no frames arrive for >15s.
-  // 15s gives scrcpy time to start up before we fall back to HTTP screencap.
+  // Fallback watchdog: only fires if WS is connected but no frames arrive for >5s.
+  // 5s gives scrcpy time to emit keyframe before refreshing via live screencap.
   setInterval(function() {
     if (!wsOk) return;
     if (lastFrameReceivedTime === 0) return;
-    if (Date.now() - lastFrameReceivedTime > 15000 && !fbRunning) {
-      console.warn('[Watchdog] No frames for 15s — starting HTTP fallback');
+    if (Date.now() - lastFrameReceivedTime > 5000 && !fbRunning) {
+      console.warn('[Watchdog] No frames for 5s — refreshing live screen');
       startFallback();
     }
   }, 1000);
 
-  // Separate first-frame watchdog — if WS is open but no frame ever arrives in 12s, fallback
+  // Separate first-frame watchdog — if WS is open but no frame ever arrives in 5s, fallback
   let firstFrameTimer = null;
   function startFirstFrameWatchdog() {
     if (firstFrameTimer) clearTimeout(firstFrameTimer);
     firstFrameTimer = setTimeout(function() {
       if (wsOk && lastFrameReceivedTime === 0 && !fbRunning) {
-        console.warn('[Watchdog] No first frame within 12s — starting HTTP fallback');
+        console.warn('[Watchdog] No first frame within 5s — starting live fallback');
         startFallback();
       }
-    }, 12000);
+    }, 5000);
   }
 
   function connectWS() {
@@ -1379,6 +1412,7 @@ function buildPlayerHtml(serial, screenW, screenH) {
       flushQueue();
       // Instantly nudge Android encoder to generate fresh keyframe
       send({ type: 'wake' });
+      startFirstFrameWatchdog();
     };
 
     ws.onmessage = function(e) {
@@ -1419,7 +1453,11 @@ function buildPlayerHtml(serial, screenW, screenH) {
 
       if (!(e.data instanceof ArrayBuffer)) return;
       lastFrameReceivedTime = Date.now();
-      if (fbRunning) { fbRunning = false; modeText.textContent = 'LIVE 60FPS'; }
+      if (fbRunning) {
+        fbRunning = false;
+        if (fbPollTimer) { clearTimeout(fbPollTimer); fbPollTimer = null; }
+        modeText.textContent = 'LIVE 60FPS';
+      }
 
       const rawU8 = new Uint8Array(e.data);
       if (rawU8.length < 4) return;
@@ -1510,10 +1548,35 @@ function buildPlayerHtml(serial, screenW, screenH) {
   }
 
   // ── HTTP screencap fallback ───────────────────────────────────────────────
-  // DISABLED — strict scrcpy H264 only, no fallback
   let fbRunning = false;
+  let fbPollTimer = null;
   function startFallback() {
-    // Disabled
+    if (fbRunning) return;
+    fbRunning = true;
+    console.info('[Stream] Live image fallback engaged');
+    modeText.textContent = 'LIVE (REFRESH)';
+    send({ type: 'refresh' });
+
+    function poll() {
+      if (!fbRunning || !wsOk) {
+        fbRunning = false;
+        return;
+      }
+      const img = new Image();
+      const t = Date.now();
+      img.onload = function() {
+        if (!fbRunning) return;
+        queueDraw(img);
+        lastFrameReceivedTime = Date.now();
+        fbPollTimer = setTimeout(poll, 400);
+      };
+      img.onerror = function() {
+        if (!fbRunning) return;
+        fbPollTimer = setTimeout(poll, 1500);
+      };
+      img.src = '/screen.jpg?udid=' + encodeURIComponent('${serial}') + '&admin=true&t=' + t;
+    }
+    poll();
   }
 
   // ── Control: WS-only, never fetch ───────────────────────────────────────

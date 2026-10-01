@@ -8,6 +8,15 @@ export default function CctvWall({ currentUser, isSuperAdmin, isSeedAdmin }) {
   const [loading, setLoading] = useState(true);
   const [cctvLocked, setCctvLocked] = useState(false);
   const [focusDevice, setFocusDevice] = useState(null);
+  const [feedTimestamp, setFeedTimestamp] = useState(Date.now());
+
+  const handleRefreshFeeds = () => {
+    setFeedTimestamp(Date.now());
+    fetchDevicesAndLockState(true);
+    try {
+      fetch('https://agent.dennoh.site/api/devices/rescan', { method: 'POST' }).catch(() => {});
+    } catch (_) {}
+  };
 
   const fetchDevicesAndLockState = async (isInitial = false) => {
     if (isInitial) setLoading(true);
@@ -153,7 +162,7 @@ export default function CctvWall({ currentUser, isSuperAdmin, isSeedAdmin }) {
                 {cctvLocked ? '🔒 Admin Monitor: LOCKED' : '🔓 Admin Monitor: ALLOWED'}
               </button>
             )}
-            <button onClick={() => fetchDevicesAndLockState(true)} className="btn btn-secondary" style={{ fontSize: '12px', padding: '8px 14px' }}>
+            <button onClick={handleRefreshFeeds} className="btn btn-secondary" style={{ fontSize: '12px', padding: '8px 14px' }}>
               <RefreshCw size={14} /> Refresh Feeds
             </button>
           </div>
@@ -201,6 +210,7 @@ export default function CctvWall({ currentUser, isSuperAdmin, isSeedAdmin }) {
                 <div style={{ position: 'relative', width: '100%', aspectRatio: '9 / 16', background: '#000', overflow: 'hidden' }}>
                   {streamUrl && !isFocused ? (
                     <iframe 
+                      key={`${d.id}_${feedTimestamp}`}
                       src={streamUrl} 
                       style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} 
                       title={d.serial} 

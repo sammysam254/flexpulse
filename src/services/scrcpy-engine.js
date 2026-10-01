@@ -245,9 +245,36 @@ class ScrcpyEngine extends EventEmitter {
     return this.isRunning && this.controlSocket && !this.controlSocket.destroyed;
   }
 
+  captureLivePng() {
+    return new Promise((resolve) => {
+      const proc = spawn(ADB_BIN, ['-s', this.serial, 'exec-out', 'screencap', '-p'], {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      const chunks = [];
+      const timer = setTimeout(() => {
+        try { proc.kill(); } catch (_) {}
+        resolve(null);
+      }, 3500);
+      proc.stdout.on('data', c => chunks.push(c));
+      proc.on('close', (code) => {
+        clearTimeout(timer);
+        if (code === 0 && chunks.length > 0) {
+          resolve(Buffer.concat(chunks));
+        } else {
+          resolve(null);
+        }
+      });
+      proc.on('error', () => {
+        clearTimeout(timer);
+        resolve(null);
+      });
+    });
+  }
+
   /**
-   * Register a WS client. We immediately flush the cached SPS/PPS + IDR keyframe
-   * so the WebCodecs decoder is initialised before any new delta frame arrives.
+   * Register a WS client. We immediately send SPS/PPS and a fresh live frame
+   * so the browser decodes immediately and shows the current live screen with clock.
    */
   addClient(ws) {
     ws._needsKeyframe = false;
@@ -257,16 +284,31 @@ class ScrcpyEngine extends EventEmitter {
     ws._congestedCount = 0;
     ws._healthyCount = 0;
     this.wsClients.add(ws);
-    // Send cached SPS/PPS config & IDR keyframe immediately so WebCodecs decodes instantly
-    const initialPacket = this._keyframeBuffer || this._configPacket;
-    if (initialPacket && ws.readyState === 1) {
-      try { ws.send(initialPacket, { binary: true }); } catch (_) {}
+
+    // Send cached SPS/PPS config immediately so WebCodecs decoder is ready
+    if (this._configPacket && ws.readyState === 1) {
+      try { ws.send(this._configPacket, { binary: true }); } catch (_) {}
     }
-    // Nudge Android window compositor with WAKEUP (224) and MENU (82) to dismiss lockscreen and produce fresh frames
+
+    // Immediately capture & send a fresh live frame so the screen shows current time instantly
+    this.captureLivePng().then((png) => {
+      if (png && ws.readyState === 1) {
+        try { ws.send(png, { binary: true }); } catch (_) {}
+      } else if (this._keyframeBuffer && ws.readyState === 1) {
+        try { ws.send(this._keyframeBuffer, { binary: true }); } catch (_) {}
+      }
+    }).catch(() => {
+      if (this._keyframeBuffer && ws.readyState === 1) {
+        try { ws.send(this._keyframeBuffer, { binary: true }); } catch (_) {}
+      }
+    });
+
+    // Nudge Android display with WAKEUP (224) and MENU (82) to dismiss lockscreen and keep awake
     try {
+      this._adb(['shell', 'svc', 'power', 'stayon', 'true']).catch(() => {});
+      this._adb(['shell', 'settings', 'put', 'global', 'stay_on_while_plugged_in', '7']).catch(() => {});
       this._adb(['shell', 'input', 'keyevent', '224']).catch(() => {});
       this._adb(['shell', 'input', 'keyevent', '82']).catch(() => {});
-      this._adb(['shell', 'svc', 'power', 'stayon', 'true']).catch(() => {});
     } catch (_) {}
   }
 
@@ -471,7 +513,9 @@ class ScrcpyEngine extends EventEmitter {
     this._fallbackProc = proc;
 
     proc.stdout.on('data', (chunk) => {
-      this._broadcastVideo(chunk, false);
+      const info = inspectH264Payload(chunk);
+      const isKeyframe = info.isSps || info.isIdr;
+      this._broadcastVideo(chunk, isKeyframe);
     });
 
     proc.on('close', () => {
@@ -590,13 +634,38 @@ class ScrcpyEngine extends EventEmitter {
     const DEVICE_HEADER_LEN = 77;
     const META = 12; // 8-byte PTS + 4-byte size
 
-    const watchdog = setInterval(() => {
-      // 1. If no video data received for 3s while clients are watching, nudge screen compositor to unfreeze
-      if (this.isRunning && this.wsClients.size > 0 && Date.now() - lastDataTime > 3000) {
-        try {
-          this._adb(['shell', 'input', 'keyevent', '224']).catch(() => {});
-        } catch (_) {}
+    let isPulsing = false;
+    const watchdog = setInterval(async () => {
+      if (!this.isRunning) return;
+
+      // 1. If no video data received while clients are watching, keep stream alive and ticking
+      if (this.wsClients.size > 0) {
+        const idleTime = Date.now() - lastDataTime;
+        if (idleTime > 2500 && !isPulsing) {
+          isPulsing = true;
+          try {
+            // Nudge display awake and dismiss keyguard
+            this._adb(['shell', 'input', 'keyevent', '224']).catch(() => {});
+            this._adb(['shell', 'input', 'keyevent', '82']).catch(() => {});
+
+            // If screen is static and MediaCodec produced no H264 packets for >3.5s,
+            // deliver a live PNG frame so the status bar clock and static UI stay 100% real-time!
+            if (idleTime > 3500) {
+              const livePng = await this.captureLivePng();
+              if (livePng && this.wsClients.size > 0) {
+                for (const ws of this.wsClients) {
+                  if (ws.readyState === 1 && (ws.bufferedAmount || 0) < 64 * 1024) {
+                    try { ws.send(livePng, { binary: true }); } catch (_) {}
+                  }
+                }
+              }
+            }
+          } catch (_) {} finally {
+            isPulsing = false;
+          }
+        }
       }
+
       // 2. Only trigger fallback if video socket is destroyed or disconnected
       if ((!this.videoSocket || this.videoSocket.destroyed) && !this._fallbackActive && this.isRunning) {
         logger.warn(`[ScrcpyEngine ${this.serial}] Video socket disconnected — starting screenrecord fallback`);
@@ -842,13 +911,19 @@ class ScrcpyEngine extends EventEmitter {
       // ── Stream-Preserving Frame Delivery ──
       // Keyframes (IDR / SPS / PPS) are ALWAYS sent unconditionally so decoder never desyncs!
       if (!isKeyframe) {
-        // Immediate buffer safety: if buffer exceeds 80KB, drop delta frames until next keyframe
-        if (bufLen > 80 * 1024) {
+        // Immediate buffer safety: if socket buffer is backlogged (>160KB), drop delta frame
+        if (bufLen > 160 * 1024) {
           ws._needsKeyframe = true;
+          continue;
         }
 
+        // Once buffer drains below 32KB, automatically recover and resume stream delivery!
         if (ws._needsKeyframe) {
-          continue;
+          if (bufLen < 32 * 1024) {
+            ws._needsKeyframe = false;
+          } else {
+            continue;
+          }
         }
 
         // Adaptive decimation without breaking stream:
@@ -919,7 +994,7 @@ class ScrcpyEngine extends EventEmitter {
           const startTime = Date.now();
           
           // Capture screenshot
-          const proc = spawn(ADB_BIN, ['-s', this.serial, 'exec-out', 'screencap -p'], {
+          const proc = spawn(ADB_BIN, ['-s', this.serial, 'exec-out', 'screencap', '-p'], {
             windowsHide: true,
             stdio: ['ignore', 'pipe', 'ignore']
           });

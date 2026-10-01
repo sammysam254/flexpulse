@@ -301,13 +301,14 @@ function startDashboardServer(port = 7400) {
         return;
       }
 
-      if (url === '/api/system/sync' || url === '/api/system/update') {
+      if (url === '/api/system/sync' || url === '/api/system/update' || url === '/api/system/restart') {
         const autoSync = require('../services/auto-sync-service');
+        const force = fullUrl.searchParams.get('force') === 'true' || url === '/api/system/restart';
         if (autoSync && autoSync.checkAndSyncGithub) {
-          autoSync.checkAndSyncGithub().catch(() => {});
+          autoSync.checkAndSyncGithub(force).catch(() => {});
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', message: 'Sync check initiated' }));
+        res.end(JSON.stringify({ status: 'ok', message: force ? 'Sync and restart initiated' : 'Sync check initiated' }));
         return;
       }
 
